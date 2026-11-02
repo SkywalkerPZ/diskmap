@@ -1,0 +1,12 @@
+{
+  "id": "dotnet-build",
+  "category": "Developer",
+  "title": ".NET build output (bin, obj)",
+  "label": "Rebuildable",
+  "explanation": "Build output that your tools can build again.",
+  "consequence": "Comes back on the next install or build",
+  "method": "Quarantine",
+  "needsAdmin": false,
+  "folderNames": ["bin", "obj"],
+  "requireSibling": ["*.csproj", "*.fsproj", "*.vbproj"]
+}

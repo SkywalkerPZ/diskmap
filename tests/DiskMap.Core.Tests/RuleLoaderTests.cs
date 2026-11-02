@@ -11,8 +11,8 @@ public class RuleLoaderTests
     public void LoadAll_LoadsTheShippedRules()
     {
         var rules = RuleLoader.LoadAll(DataDir);
-        Assert.Equal(11, rules.Count);
-        Assert.Equal(11, rules.Select(r => r.Id).Distinct().Count());
+        Assert.Equal(12, rules.Count);
+        Assert.Equal(12, rules.Select(r => r.Id).Distinct().Count());
         // every shipped path must expand cleanly: no leftover token, no collapsed or doubled separators
         using var fx = new Fixture();
         var sep = Path.DirectorySeparatorChar;
@@ -25,6 +25,57 @@ public class RuleLoaderTests
         Assert.All(rules.SelectMany(r => r.Paths).Where(p => p.StartsWith("C:")), p => Assert.StartsWith("C:" + sep, p));
         Assert.Contains(rules.Single(r => r.Id == "dev-caches").Paths, p => p.Contains(sep + "npm-cache"));
     }
+
+    private static readonly string[] None = [];
+    private static readonly string[] Csproj = ["*.csproj", "*.fsproj", "*.vbproj"];
+
+    // '/' stands for the path separator so no backslash escaping can go wrong.
+    private static string[] P(params string[] p) => p.Select(s => s.Replace('/', Path.DirectorySeparatorChar)).ToArray();
+
+    public static TheoryData<string, SafetyLabel, RemovalMethod, bool, string[], string[], string[], string[], int?> Expected => new()
+    {
+        { "windows-update", SafetyLabel.Safe, RemovalMethod.DismComponentCleanup, true, P("{Windows}/WinSxS"), None, None, None, null },
+        { "temp", SafetyLabel.Safe, RemovalMethod.Quarantine, false, P("{Temp}"), None, None, None, null },
+        { "windows-temp", SafetyLabel.Safe, RemovalMethod.Quarantine, true, P("{Windows}/Temp"), None, None, None, null },
+        { "browser-cache", SafetyLabel.Safe, RemovalMethod.Quarantine, false, P(
+            "{LocalAppData}/Google/Chrome/User Data/*/Cache", "{LocalAppData}/Google/Chrome/User Data/*/Code Cache",
+            "{LocalAppData}/Microsoft/Edge/User Data/*/Cache", "{LocalAppData}/Microsoft/Edge/User Data/*/Code Cache",
+            "{LocalAppData}/Mozilla/Firefox/Profiles/*/cache2"), None, None, None, null },
+        { "hibernation", SafetyLabel.SafeIfNoHibernate, RemovalMethod.PowercfgHibernateOff, true, P("C:/hiberfil.sys"), None, None, None, null },
+        { "dev-caches", SafetyLabel.Rebuildable, RemovalMethod.Quarantine, false,
+            P("{LocalAppData}/npm-cache", "{LocalAppData}/pip/Cache", "{UserProfile}/.nuget/packages"),
+            ["node_modules", ".gradle"], None, None, null },
+        { "dotnet-build", SafetyLabel.Rebuildable, RemovalMethod.Quarantine, false, None, ["bin", "obj"], Csproj, None, null },
+        { "shader-cache", SafetyLabel.Safe, RemovalMethod.Quarantine, false, P(
+            "{LocalAppData}/NVIDIA/DXCache", "{LocalAppData}/NVIDIA/GLCache", "{LocalAppData}/AMD/DxCache", "{LocalAppData}/D3DSCache"), None, None, None, null },
+        { "old-installers", SafetyLabel.CheckFirst, RemovalMethod.Quarantine, false, P("{Downloads}"), None, None, [".exe", ".msi", ".zip"], 90 },
+        { "recycle-bin", SafetyLabel.AlreadyDeleted, RemovalMethod.EmptyRecycleBin, false, P("C:/$Recycle.Bin/{Sid}"), None, None, None, null },
+        { "crash-dumps", SafetyLabel.Safe, RemovalMethod.Quarantine, false,
+            P("{LocalAppData}/CrashDumps", "{LocalAppData}/Microsoft/Windows/WER"), None, None, None, null },
+        { "crash-dumps-system", SafetyLabel.Safe, RemovalMethod.Quarantine, true,
+            P("{Windows}/Minidump", "{Windows}/MEMORY.DMP", "C:/ProgramData/Microsoft/Windows/WER"), None, None, None, null },
+    };
+
+    [Theory]
+    [MemberData(nameof(Expected))]
+    public void ShippedRules_ExactContent(string id, SafetyLabel label, RemovalMethod method, bool admin,
+        string[] paths, string[] folders, string[] siblings, string[] exts, int? minAge)
+    {
+        var r = Get(id);
+        Assert.Equal(label, r.Label);
+        Assert.Equal(method, r.Method);
+        Assert.Equal(admin, r.NeedsAdmin);
+        Assert.Equal(paths, r.Paths);
+        Assert.Equal(folders, r.FolderNames);
+        Assert.Equal(siblings, r.RequireSibling);
+        Assert.Equal(exts, r.Extensions);
+        Assert.Equal(minAge, r.MinAgeDays);
+        Assert.Equal(method == RemovalMethod.Quarantine, r.Undoable);
+    }
+
+    [Fact]
+    public void ShippedRules_TableCoversEveryRule() =>
+        Assert.Equal(Expected.Select(d => (string)d[0]!).Order(), RuleLoader.LoadAll(DataDir).Select(r => r.Id).Order());
 
     [Fact]
     public void ShippedRules_MatchSpecLabels()
@@ -56,6 +107,7 @@ public class RuleLoaderTests
     [InlineData("browser-cache", "Sites load a bit slower once")]
     [InlineData("hibernation", "Hibernate and Fast Startup stop working")]
     [InlineData("dev-caches", "Comes back on the next install or build")]
+    [InlineData("dotnet-build", "Comes back on the next install or build")]
     [InlineData("shader-cache", "Games stutter a little on first launch")]
     [InlineData("old-installers", "It might be your only copy")]
     [InlineData("recycle-bin", "Emptying it is permanent")]
