@@ -204,6 +204,20 @@ public sealed partial class MftScannerTests
     }
 
     [Fact]
+    public void Parse_WofCompressedFileCountsBackingStream()
+    {
+        // CompactOS layout: reparse attribute, sparse unnamed $DATA with nothing allocated, bytes in WofCompressedData.
+        var p = MftRecordParser.Parse(Record(1, StdInfo(T, 0x420 | 0x200), FileName(5, "notepad.exe"),
+            NonResident(0x80, 0, 1 << 20, 200000, SomeRuns, flags: 0x8000, compressed: 0),
+            NonResident(0x80, 0, 81920, 80000, SomeRuns, name: "WofCompressedData")))!;
+        Assert.Equal(81920, p.AllocatedSize(4096));
+        var resident = MftRecordParser.Parse(Record(1, StdInfo(T, 0x420 | 0x200), FileName(5, "tiny.dll"),
+            NonResident(0x80, 0, 65536, 3000, SomeRuns, flags: 0x8000, compressed: 0),
+            Resident(0x80, new byte[300], "WofCompressedData")))!;
+        Assert.Equal(4096, resident.AllocatedSize(4096));
+    }
+
+    [Fact]
     public void ParseRuns_HandlesRelativeNegativeAndSparseRuns()
     {
         byte[] runs = [0x11, 0x02, 0x0A, 0x11, 0x04, 0x1E, 0x11, 0x01, 0xF6, 0x01, 0x03, 0x21, 0x10, 0x00, 0x01, 0x00];

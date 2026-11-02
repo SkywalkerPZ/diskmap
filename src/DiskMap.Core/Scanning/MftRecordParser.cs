@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace DiskMap.Core.Scanning;
@@ -15,16 +16,21 @@ internal sealed class MftRecord
     public bool DataResident;
     public long DataSize, DataAllocated;
     public List<(long Lcn, long Length)>? DataRuns; // only when parsed withRuns
+    public long WofAllocated = -1;      // WofCompressedData stream (CompactOS/WOF); -1 when absent
 
-    /// <summary>Same rule as FolderWalkScanner: 0 for empty, resident data rounds up to a cluster.</summary>
+    private static long RoundUp(long n, long cluster) => (n + cluster - 1) / cluster * cluster;
+
+    /// <summary>Same rule as FolderWalkScanner: 0 for empty, resident data rounds up to a cluster.
+    /// WOF files keep their bytes in the WofCompressedData stream (the unnamed one is sparse), which is what GetCompressedFileSizeW reports.</summary>
     public long AllocatedSize(long cluster) =>
         !HasData || DataSize == 0 ? 0
-        : DataResident ? (DataSize + cluster - 1) / cluster * cluster
-        : DataAllocated;
+        : DataResident ? RoundUp(DataSize, cluster)
+        : DataAllocated + (WofAllocated > 0 ? RoundUp(WofAllocated, cluster) : 0);
 
     public void Merge(MftRecord ext)
     {
         Names.AddRange(ext.Names);
+        if (WofAllocated < 0) WofAllocated = ext.WofAllocated;
         if (HasData || !ext.HasData) return;
         HasData = true; DataResident = ext.DataResident; DataSize = ext.DataSize; DataAllocated = ext.DataAllocated; DataRuns = ext.DataRuns;
     }
@@ -58,6 +64,7 @@ internal static class MftRecordParser
                 if (len < 16 || len > end - off) return null;
                 ReadOnlySpan<byte> a = rec.Slice(off, len);
                 bool nonResident = a[8] != 0, unnamed = a[9] == 0;
+                if (type == 0x80 && !unnamed && WofStream(a, nonResident) is var wof and >= 0) r.WofAllocated = wof;
                 switch (type)
                 {
                     case 0x10 when !nonResident: // $STANDARD_INFORMATION
@@ -95,6 +102,16 @@ internal static class MftRecordParser
         catch (ArgumentOutOfRangeException) { return null; } // field points outside the record
         catch (InvalidDataException) { return null; }
         return r;
+    }
+
+    private const string WofName = "WofCompressedData";
+
+    /// <summary>Allocated bytes of a WofCompressedData $DATA attribute (first segment), else -1.</summary>
+    private static long WofStream(ReadOnlySpan<byte> a, bool nonResident)
+    {
+        if (a[9] != WofName.Length || !MemoryMarshal.Cast<byte, char>(a.Slice(U16(a, 0x0A), WofName.Length * 2)).SequenceEqual(WofName)) return -1;
+        if (!nonResident) return U32(a, 0x10);
+        return I64(a, 0x10) == 0 ? ((U16(a, 0x0C) & 0x80FF) != 0 ? I64(a, 0x40) : I64(a, 0x28)) : -1;
     }
 
     private static ReadOnlySpan<byte> Value(ReadOnlySpan<byte> a) => a.Slice(U16(a, 0x14), (int)U32(a, 0x10));
