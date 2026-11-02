@@ -1,0 +1,11 @@
+{
+  "id": "temp",
+  "category": "Temp",
+  "title": "Temp folders (%TEMP%)",
+  "label": "Safe",
+  "explanation": "Scratch files apps leave behind.",
+  "consequence": "Apps recreate them",
+  "method": "Quarantine",
+  "needsAdmin": false,
+  "paths": ["{Temp}"]
+}

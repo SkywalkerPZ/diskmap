@@ -7,4 +7,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="DiskMap.Core.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Rules/data/*.json" CopyToOutputDirectory="PreserveNewest" LinkBase="Rules/data" />
+  </ItemGroup>
 </Project>

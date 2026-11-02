@@ -1,0 +1,17 @@
+{
+  "id": "dev-caches",
+  "category": "Developer",
+  "title": "node_modules, .NET bin/obj, .gradle, npm/pip/NuGet caches",
+  "label": "Rebuildable",
+  "explanation": "Downloaded packages and build output that your tools can fetch or build again.",
+  "consequence": "Comes back on the next install or build",
+  "method": "Quarantine",
+  "needsAdmin": false,
+  "paths": [
+    "{LocalAppData}\\npm-cache",
+    "{LocalAppData}\\pip\\Cache",
+    "{UserProfile}\\.nuget\\packages"
+  ],
+  "folderNames": ["node_modules", ".gradle", "bin", "obj"],
+  "requireSibling": ["*.csproj", "*.fsproj", "*.vbproj"]
+}

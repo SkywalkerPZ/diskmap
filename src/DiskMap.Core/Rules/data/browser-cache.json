@@ -1,0 +1,17 @@
+{
+  "id": "browser-cache",
+  "category": "Browsers",
+  "title": "Browser caches (Chrome, Edge, Firefox)",
+  "label": "Safe",
+  "explanation": "Saved copies of web pages and images that browsers keep to load sites faster.",
+  "consequence": "Sites load a bit slower once",
+  "method": "Quarantine",
+  "needsAdmin": false,
+  "paths": [
+    "{LocalAppData}\\Google\\Chrome\\User Data\\*\\Cache",
+    "{LocalAppData}\\Google\\Chrome\\User Data\\*\\Code Cache",
+    "{LocalAppData}\\Microsoft\\Edge\\User Data\\*\\Cache",
+    "{LocalAppData}\\Microsoft\\Edge\\User Data\\*\\Code Cache",
+    "{LocalAppData}\\Mozilla\\Firefox\\Profiles\\*\\cache2"
+  ]
+}

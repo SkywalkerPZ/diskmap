@@ -1,0 +1,16 @@
+{
+  "id": "shader-cache",
+  "category": "Graphics",
+  "title": "GPU and DirectX shader caches (NVIDIA, AMD, DirectX)",
+  "label": "Safe",
+  "explanation": "Compiled graphics code that games and drivers save so they start faster.",
+  "consequence": "Games stutter a little on first launch",
+  "method": "Quarantine",
+  "needsAdmin": false,
+  "paths": [
+    "{LocalAppData}\\NVIDIA\\DXCache",
+    "{LocalAppData}\\NVIDIA\\GLCache",
+    "{LocalAppData}\\AMD\\DxCache",
+    "{LocalAppData}\\D3DSCache"
+  ]
+}

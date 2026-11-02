@@ -1,0 +1,11 @@
+{
+  "id": "hibernation",
+  "category": "Windows",
+  "title": "Hibernation file (hiberfil.sys)",
+  "label": "SafeIfNoHibernate",
+  "explanation": "A copy of memory Windows saves to disk for hibernate and Fast Startup.",
+  "consequence": "Hibernate and Fast Startup stop working",
+  "method": "PowercfgHibernateOff",
+  "needsAdmin": true,
+  "paths": ["C:\\hiberfil.sys"]
+}

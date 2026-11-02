@@ -1,0 +1,11 @@
+{
+  "id": "windows-update",
+  "category": "Windows",
+  "title": "Windows update leftovers (component store cleanup)",
+  "label": "Safe",
+  "explanation": "Copies of old Windows files kept after updates so you can roll back.",
+  "consequence": "You can no longer roll back the last update",
+  "method": "DismComponentCleanup",
+  "needsAdmin": true,
+  "paths": ["{Windows}\\WinSxS"]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "old-installers",
+  "category": "Downloads",
+  "title": "Old installers in Downloads (.exe, .msi, .zip, older than 90 days)",
+  "label": "CheckFirst",
+  "explanation": "Setup files and archives in your Downloads folder that have not been touched for a while.",
+  "consequence": "It might be your only copy",
+  "method": "Quarantine",
+  "needsAdmin": false,
+  "paths": ["{Downloads}"],
+  "extensions": [".exe", ".msi", ".zip"],
+  "minAgeDays": 90
+}

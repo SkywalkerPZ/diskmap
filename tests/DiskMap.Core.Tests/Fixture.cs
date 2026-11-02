@@ -5,6 +5,18 @@ public sealed class Fixture : IDisposable
 {
     public string Root { get; } = Directory.CreateTempSubdirectory("diskmap-").FullName;
 
+    /// <summary>A fake user whose folders all live inside Root.</summary>
+    public DiskMap.Core.Rules.UserContext User { get; }
+
+    public Fixture()
+    {
+        var p = Path.Combine(Root, "Users", "tester");
+        User = new DiskMap.Core.Rules.UserContext("S-1-5-21-0-0-0-1001", p, Path.Combine(p, "AppData", "Local"),
+            Path.Combine(p, "AppData", "Roaming"), Path.Combine(p, "AppData", "Local", "Temp"), Path.Combine(p, "Downloads"));
+        foreach (var d in new[] { User.ProfilePath, User.LocalAppData, User.AppData, User.Temp, User.Downloads })
+            Directory.CreateDirectory(d);
+    }
+
     /// <summary>Creates a file of the given size (creating parent dirs) and returns its full path.</summary>
     public string File(string relPath, int bytes, DateTime? lastWriteUtc = null)
     {

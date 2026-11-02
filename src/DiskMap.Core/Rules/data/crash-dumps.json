@@ -1,0 +1,11 @@
+{
+  "id": "crash-dumps",
+  "category": "Windows",
+  "title": "Crash dumps and Windows Error Reporting files",
+  "label": "Safe",
+  "explanation": "Reports Windows and apps save after a crash.",
+  "consequence": "They're only useful for debugging a past crash",
+  "method": "Quarantine",
+  "needsAdmin": false,
+  "paths": ["{LocalAppData}\\CrashDumps", "{LocalAppData}\\Microsoft\\Windows\\WER"]
+}

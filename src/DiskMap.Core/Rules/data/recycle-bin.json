@@ -1,0 +1,11 @@
+{
+  "id": "recycle-bin",
+  "category": "Windows",
+  "title": "Recycle Bin",
+  "label": "AlreadyDeleted",
+  "explanation": "Files you already deleted that are waiting in the Recycle Bin.",
+  "consequence": "Emptying it is permanent",
+  "method": "EmptyRecycleBin",
+  "needsAdmin": false,
+  "paths": ["C:\\$Recycle.Bin\\{Sid}"]
+}

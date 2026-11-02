@@ -1,0 +1,11 @@
+{
+  "id": "windows-temp",
+  "category": "Temp",
+  "title": "Temp folders (C:\\Windows\\Temp)",
+  "label": "Safe",
+  "explanation": "Scratch files apps leave behind.",
+  "consequence": "Apps recreate them",
+  "method": "Quarantine",
+  "needsAdmin": true,
+  "paths": ["{Windows}\\Temp"]
+}

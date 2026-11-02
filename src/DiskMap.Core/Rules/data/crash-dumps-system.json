@@ -1,0 +1,11 @@
+{
+  "id": "crash-dumps-system",
+  "category": "Windows",
+  "title": "Crash dumps and Windows Error Reporting files (system)",
+  "label": "Safe",
+  "explanation": "Reports Windows saves after a system crash.",
+  "consequence": "They're only useful for debugging a past crash",
+  "method": "Quarantine",
+  "needsAdmin": true,
+  "paths": ["{Windows}\\Minidump", "{Windows}\\MEMORY.DMP", "C:\\ProgramData\\Microsoft\\Windows\\WER"]
+}
