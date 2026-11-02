@@ -8,6 +8,9 @@ internal static partial class NativeMethods
     public const uint FileFlagBackupSemantics = 0x02000000;
     public const uint FileShareAll = 7; // read | write | delete
     public const uint OpenExisting = 3;
+    public const uint GenericRead = 0x80000000;
+    public const uint FileShareReadWrite = 3;
+    public const uint FsctlGetNtfsVolumeData = 0x00090064;
 
     [StructLayout(LayoutKind.Sequential)]
     public struct ByHandleFileInformation
@@ -30,4 +33,8 @@ internal static partial class NativeMethods
     [LibraryImport("kernel32.dll", EntryPoint = "GetDiskFreeSpaceW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetDiskFreeSpace(string root, out uint sectorsPerCluster, out uint bytesPerSector, out uint freeClusters, out uint totalClusters);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static unsafe partial bool DeviceIoControl(SafeFileHandle h, uint code, void* inBuf, uint inSize, void* outBuf, uint outSize, out uint returned, nint overlapped);
 }
