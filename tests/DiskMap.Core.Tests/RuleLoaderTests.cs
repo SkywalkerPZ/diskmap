@@ -44,7 +44,7 @@ public class RuleLoaderTests
         { "hibernation", SafetyLabel.SafeIfNoHibernate, RemovalMethod.PowercfgHibernateOff, true, P("C:/hiberfil.sys"), None, None, None, null },
         { "dev-caches", SafetyLabel.Rebuildable, RemovalMethod.Quarantine, false,
             P("{LocalAppData}/npm-cache", "{LocalAppData}/pip/Cache", "{UserProfile}/.nuget/packages"),
-            ["node_modules", ".gradle"], None, None, null },
+            ["node_modules", ".gradle"], ["package.json", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"], None, null },
         { "dotnet-build", SafetyLabel.Rebuildable, RemovalMethod.Quarantine, false, None, ["bin", "obj"], Csproj, None, null },
         { "shader-cache", SafetyLabel.Safe, RemovalMethod.Quarantine, false, P(
             "{LocalAppData}/NVIDIA/DXCache", "{LocalAppData}/NVIDIA/GLCache", "{LocalAppData}/AMD/DxCache", "{LocalAppData}/D3DSCache"), None, None, None, null },

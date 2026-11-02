@@ -12,5 +12,6 @@
     "{LocalAppData}\\pip\\Cache",
     "{UserProfile}\\.nuget\\packages"
   ],
-  "folderNames": ["node_modules", ".gradle"]
+  "folderNames": ["node_modules", ".gradle"],
+  "requireSibling": ["package.json", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"]
 }

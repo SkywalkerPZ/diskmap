@@ -32,7 +32,7 @@ public static class RuleMatcher
 
     private static Compiled[] Compile(IReadOnlyList<Rule> rules, UserContext user, string windowsDir) =>
         rules.Select(r => new Compiled(r,
-            r.Paths.Select(t => SafetyRails.Segs(user.Expand(t, windowsDir))).ToArray(),
+            r.Paths.Select(t => SafetyRails.Anchor(t, user, windowsDir)).OfType<string[]>().ToArray(),
             new HashSet<string>(r.FolderNames, StringComparer.OrdinalIgnoreCase),
             new HashSet<string>(r.Extensions, StringComparer.OrdinalIgnoreCase),
             r.Extensions.Count > 0 || r.MinAgeDays is not null)).ToArray();
@@ -50,7 +50,7 @@ public static class RuleMatcher
                 if (c.Exts.Count > 0 && !c.Exts.Contains(Path.GetExtension(node.Name))) continue;
                 if (c.Rule.MinAgeDays is { } d && nowUtc - node.LastWriteUtc <= TimeSpan.FromDays(d)) continue;
                 segs ??= SafetyRails.Segs(path);
-                hit = c.Anchors.Any(a => a.Length < segs.Length && SafetyRails.IsPrefix(a, segs));
+                hit = c.Anchors.Any(a => a.Length + 1 == segs.Length && SafetyRails.IsPrefix(a, segs)); // direct children only
             }
             else
             {

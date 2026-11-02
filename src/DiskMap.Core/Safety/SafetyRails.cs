@@ -16,7 +16,32 @@ public static class SafetyRails
 
     /// <summary>Normalised path split into segments; a drive root is the single segment "C:".</summary>
     internal static string[] Segs(string path) =>
-        Path.GetFullPath(path).Split(Seps, StringSplitOptions.RemoveEmptyEntries);
+        LongForm(Path.GetFullPath(path)).Split(Seps, StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>Expands 8.3 short names so an 8.3 Temp still compares equal to the long scan path; unchanged if the path does not exist.</summary>
+    internal static string LongForm(string full)
+    {
+        var sb = new System.Text.StringBuilder(1024);
+        var n = GetLongPathNameW(full, sb, sb.Capacity);
+        return n > 0 && n < sb.Capacity ? sb.ToString() : full;
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int GetLongPathNameW(string path, System.Text.StringBuilder buf, int size);
+
+    /// <summary>Expanded anchor segments, or null when a token used by the template is empty (it would widen the anchor) or the result is unusable.</summary>
+    internal static string[]? Anchor(string template, UserContext user, string windowsDir)
+    {
+        var tokens = new (string T, string V)[] { ("{UserProfile}", user.ProfilePath), ("{LocalAppData}", user.LocalAppData),
+            ("{AppData}", user.AppData), ("{Temp}", user.Temp), ("{Downloads}", user.Downloads), ("{Windows}", windowsDir), ("{Sid}", user.Sid) };
+        if (tokens.Any(t => template.Contains(t.T) && string.IsNullOrWhiteSpace(t.V))) return null;
+        try
+        {
+            var e = user.Expand(template, windowsDir);
+            return Path.IsPathFullyQualified(e) ? Segs(e) : null;
+        }
+        catch (Exception) { return null; }
+    }
 
     /// <summary>True when <paramref name="pattern"/> is a whole-segment prefix of (or equal to) <paramref name="path"/>; a lone <c>*</c> segment matches any one segment.</summary>
     internal static bool IsPrefix(string[] pattern, string[] path)
@@ -72,19 +97,23 @@ public static class SafetyRails
         var fileRule = rule.Extensions.Count > 0 || rule.MinAgeDays is not null;
         foreach (var t in rule.Paths)
         {
-            var a = Segs(user.Expand(t, windowsDir));
-            if (a.Length < 2 || IsPrefix(a, win) || programFiles.Any(d => IsPrefix(a, d)) || IsPrefix(a, profile)) continue;
+            var a = Anchor(t, user, windowsDir);
+            if (a is null || a.Length < 2 || IsPrefix(a, win) || programFiles.Any(d => IsPrefix(a, d)) || IsPrefix(a, profile)) continue;
             // an anchor that is, or contains, a protected folder is too broad, except Downloads for a file-filtered rule
             if (protectedDirs.Any(d => IsPrefix(a, d)) && !(fileRule && downloads.Any(d => IsPrefix(a, d) && IsPrefix(d, a)))) continue;
+            if (IsPrefix(win, a) && !t.StartsWith("{Windows}", StringComparison.Ordinal)) continue; // only {Windows} rules may reach in
             if (!IsPrefix(a, p)) continue;
             if (fileRule)
             {
-                if (p.Length <= a.Length) continue; // the folder itself, never
+                if (p.Length != a.Length + 1) continue; // direct children only, never the folder itself or nested files
                 if (rule.Extensions.Count > 0 && !rule.Extensions.Contains(Path.GetExtension(p[^1]), StringComparer.OrdinalIgnoreCase)) continue;
             }
+            if (fileRule && !FileOk(string.Join(Path.DirectorySeparatorChar, p), rule)) continue;
             return a.Length;
         }
-        if (rule.FolderNames.Count == 0 || fileRule || !IsPrefix(profile, p)) return -1;
+        if (rule.FolderNames.Count == 0 || fileRule || !IsPrefix(profile, p) || p.Length == profile.Length) return -1;
+        // installed software and tool configs live here; their node_modules/.gradle do not come back on a build
+        if (IsPrefix(Segs(user.AppData), p) || IsPrefix(Segs(user.LocalAppData), p) || p[profile.Length].StartsWith('.')) return -1;
         for (var i = profile.Length; i < p.Length; i++)
         {
             if (!rule.FolderNames.Contains(p[i], StringComparer.OrdinalIgnoreCase)) continue;
@@ -92,6 +121,14 @@ public static class SafetyRails
                 return profile.Length + 1;
         }
         return -1;
+    }
+
+    private static bool FileOk(string path, Rule rule)
+    {
+        if (Directory.Exists(path)) return false;
+        if (rule.MinAgeDays is not { } d) return true;
+        // the age cannot be verified for a file that is not there: refuse
+        return File.Exists(path) && DateTime.UtcNow - File.GetLastWriteTimeUtc(path) > TimeSpan.FromDays(d);
     }
 
     private static bool HasSibling(string dir, IReadOnlyList<string> globs)
