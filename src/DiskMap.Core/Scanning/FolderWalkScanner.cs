@@ -92,8 +92,11 @@ public sealed class FolderWalkScanner : IScanner
         return NativeMethods.GetDiskFreeSpace(root, out var spc, out var bps, out _, out _) ? (long)spc * bps : 4096;
     }
 
-    // Win32 calls need the \?\ prefix past MAX_PATH (.NET adds it itself for its own APIs).
+    // Win32 extended-length prefix: two backslashes + "?" + backslash. Built from chars to keep the literal unambiguous.
+    private static readonly string Ext = new string((char)92, 2) + "?" + (char)92;
+
+    // Win32 calls need the extended prefix past MAX_PATH (.NET adds it itself for its own APIs).
     private static string LongPath(string p) =>
-        p.Length < 240 || p.StartsWith(@"\?\") ? p
-        : p.StartsWith(@"\\") ? @"\?\UNC\" + p[2..] : @"\?\" + p;
+        p.Length < 240 || p.StartsWith(Ext) ? p
+        : p.StartsWith(new string((char)92, 2)) ? Ext + "UNC" + (char)92 + p[2..] : Ext + p;
 }

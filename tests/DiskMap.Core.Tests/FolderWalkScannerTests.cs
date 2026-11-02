@@ -20,6 +20,8 @@ public sealed partial class FolderWalkScannerTests
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SetFileAttributes(string path, uint attrs);
 
+    private static readonly string Ext = new string((char)92, 2) + "?" + (char)92;
+
     private static long Cluster(string path)
     {
         Assert.True(GetDiskFreeSpace(Path.GetPathRoot(path)!, out var spc, out var bps, out _, out _));
@@ -98,10 +100,14 @@ public sealed partial class FolderWalkScannerTests
     {
         using var f = new Fixture();
         var rel = string.Join(Path.DirectorySeparatorChar, Enumerable.Repeat(new string('d', 50), 7)); // > 350 chars
-        f.File(Path.Combine(rel, "deep.bin"), 10);
+        var file = f.File(Path.Combine(rel, "deep.bin"), 5000);
+        Assert.True(file.Length > 300);
+        // The hardlink is only counted once if the Win32 calls (CreateFile) work on the long path.
+        Assert.True(CreateHardLink(Ext + Path.Combine(Path.GetDirectoryName(file)!, "link.bin"), Ext + file, 0));
         var r = await Scan(f);
-        Assert.Equal(1, r.FileCount);
-        Assert.True(r.Root.Size > 0);
+        var c = Cluster(f.Root);
+        Assert.Equal(2, r.FileCount);
+        Assert.Equal((5000 + c - 1) / c * c, r.Root.Size);
     }
 
     [SkippableFact]
