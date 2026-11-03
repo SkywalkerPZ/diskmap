@@ -121,17 +121,86 @@ public class QuarantineStoreTests
     }
 
     [Fact]
-    public void CorruptManifest_LoadsEmpty_AndNeverDeletesEntryFolders()
+    public void CorruptManifest_AdoptsEntryFolders_AsUnknown_AndBacksUpOnNextSave()
     {
         using var f = new Fixture();
         var e = new QuarantineStore(f.Root).Add(f.File("a.bin", 7), 7, "rule");
         File.WriteAllText(Path.Combine(Q(f), "manifest.json"), "{ not json");
         var s = new QuarantineStore(f.Root);
+        Assert.True(s.IsCorrupt);
+        Assert.Null(s.CorruptBackupPath);
+        var adopted = Assert.Single(s.Entries);
+        Assert.Equal(e.Id, adopted.Id);
+        Assert.Null(adopted.OriginalPath);
+        Assert.Equal("unknown", adopted.RuleId);
+        Assert.Equal(7, adopted.Size);
+        Assert.True(Directory.Exists(EntryDir(f, e.Id)));
+        Assert.Throws<InvalidOperationException>(() => s.Restore(e.Id));
+
+        s.Add(f.File("b.bin", 1), 1, "r"); // first save keeps the bad manifest
+        Assert.NotNull(s.CorruptBackupPath);
+        Assert.Equal("{ not json", File.ReadAllText(s.CorruptBackupPath!));
+        Assert.Equal(2, new QuarantineStore(f.Root).Entries.Count);
+        Assert.False(new QuarantineStore(f.Root).IsCorrupt);
+
+        s.EmptyAll(); // adopted entries are purgeable like any other
         Assert.Empty(s.Entries);
-        Assert.True(Directory.Exists(EntryDir(f, e.Id)));
-        s.PurgeExpired(0, DateTime.UtcNow);
-        s.EmptyAll();
-        Assert.True(Directory.Exists(EntryDir(f, e.Id)));
+        Assert.False(Directory.Exists(EntryDir(f, e.Id)));
+    }
+
+    [Fact]
+    public void OrphanEntryFolder_IsAdoptedOnLoad()
+    {
+        using var f = new Fixture();
+        new QuarantineStore(f.Root).Add(f.File("a.bin", 1), 1, "r");
+        var id = Guid.NewGuid();
+        Directory.CreateDirectory(EntryDir(f, id));
+        File.WriteAllBytes(Path.Combine(EntryDir(f, id), "lost.bin"), new byte[40]);
+        var s = new QuarantineStore(f.Root);
+        var o = Assert.Single(s.Entries, x => x.Id == id);
+        Assert.Null(o.OriginalPath);
+        Assert.Equal(40, o.Size);
+        Assert.Equal(2, s.Entries.Count);
+    }
+
+    [Fact]
+    public void TwoInstances_EachAdd_FreshInstanceSeesBoth()
+    {
+        using var f = new Fixture();
+        var s1 = new QuarantineStore(f.Root);
+        var s2 = new QuarantineStore(f.Root);
+        s1.Add(f.File("a.bin", 1), 1, "r");
+        s2.Add(f.File("b.bin", 2), 2, "r");
+        var s3 = new QuarantineStore(f.Root);
+        Assert.Equal(2, s3.Entries.Count);
+        Assert.Equal(3, s3.TotalSize);
+    }
+
+    [Fact]
+    public void ParallelInstances_NeverLoseEntries()
+    {
+        using var f = new Fixture();
+        var files = Enumerable.Range(0, 12).Select(i => f.File($"p{i}.bin", 1)).ToArray();
+        Parallel.ForEach(files, new ParallelOptions { MaxDegreeOfParallelism = 4 },
+            p => new QuarantineStore(f.Root).Add(p, 1, "r"));
+        Assert.Equal(12, new QuarantineStore(f.Root).Entries.Count);
+    }
+
+    [Fact]
+    public void PurgeExpired_NestedJunction_IsRemovedAsLink_OutsideFileSurvives()
+    {
+        using var f = new Fixture();
+        var outside = f.File(Path.Combine("outside", "precious.txt"), 3);
+        var victim = f.Dir("victim");
+        var psi = new System.Diagnostics.ProcessStartInfo("cmd.exe") { CreateNoWindow = true, UseShellExecute = false };
+        foreach (var a in new[] { "/c", "mklink", "/J", Path.Combine(victim, "j"), Path.GetDirectoryName(outside)! }) psi.ArgumentList.Add(a);
+        using (var pr = System.Diagnostics.Process.Start(psi)!) { pr.WaitForExit(); Assert.Equal(0, pr.ExitCode); }
+        var store = new QuarantineStore(f.Root);
+        var e = store.Add(victim, 0, "r");
+        Assert.Equal(1, store.PurgeExpired(0, DateTime.UtcNow));
+        Assert.Empty(store.Entries);
+        Assert.False(Directory.Exists(EntryDir(f, e.Id)));
+        Assert.True(File.Exists(outside));
     }
 
     [Fact]
@@ -160,14 +229,16 @@ public class QuarantineStoreTests
         Assert.Empty(store.Entries);
     }
 
-    [Fact]
+    [SkippableFact]
     public void Add_Symlink_MovesLinkItself_NotTarget()
     {
         using var f = new Fixture();
         var target = f.File(Path.Combine("real", "keep.txt"), 1);
         var link = Path.Combine(f.Root, "link");
+        var made = true;
         try { Directory.CreateSymbolicLink(link, Path.GetDirectoryName(target)!); }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException) { return; } // no symlink privilege
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException) { made = false; }
+        Skip.IfNot(made, "no symlink privilege");
         var store = new QuarantineStore(f.Root);
         store.Add(link, 0, "r");
         Assert.True(File.Exists(target));
