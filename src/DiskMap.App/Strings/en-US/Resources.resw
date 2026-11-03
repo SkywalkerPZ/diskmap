@@ -33,7 +33,8 @@
   <data name="EstimateNote.Text" xml:space="preserve"><value>Windows shares many of these files, so the exact amount is only known afterwards.</value></data>
   <data name="EstimateFailed" xml:space="preserve"><value>Couldn't estimate</value></data>
   <data name="RemoveButton.Content" xml:space="preserve"><value>Remove</value></data>
-  <data name="NeedsAdminTip.Content" xml:space="preserve"><value>Needs administrator</value></data>
+  <data name="NeedsAdministrator" xml:space="preserve"><value>Needs administrator</value></data>
+  <data name="DeletedPermanently" xml:space="preserve"><value>Undo is off, so the files will be deleted permanently.</value></data>
   <data name="NeedsAdminText.Text" xml:space="preserve"><value>Needs administrator</value></data>
   <data name="OpenInExplorerButton.Content" xml:space="preserve"><value>Open in Explorer</value></data>
   <data name="ConfirmTitle" xml:space="preserve"><value>Remove {0}?</value></data>

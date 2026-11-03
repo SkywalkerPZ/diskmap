@@ -31,6 +31,23 @@ public class FileTreeTests
     }
 
     [Fact]
+    public void ReplaceContents_DetachesOldChildren()
+    {
+        var a = File("a", 100);
+        var nm = Dir("node_modules", a);
+        var oldJson = File("package.json", 10);
+        var proj = Dir("proj", oldJson, nm);
+        var root = Dir("r", proj);
+
+        FileTree.ReplaceContents(proj, Dir("proj", File("package.json", 10)));
+
+        Assert.Null(nm.Parent);
+        Assert.Null(oldJson.Parent);
+        Assert.NotSame(root, FileTree.RootOf(a)); // a node under a replaced child no longer reaches the live root
+        Assert.Same(nm, FileTree.RootOf(a));
+    }
+
+    [Fact]
     public void Remove_DetachesAndFixesAncestors()
     {
         var nm = Dir("node_modules", File("a", 100));

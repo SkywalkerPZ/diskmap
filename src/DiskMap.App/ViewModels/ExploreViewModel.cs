@@ -75,6 +75,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     public bool IsComponentStore => Match?.Rule.Method == RemovalMethod.DismComponentCleanup;
     /// <summary>Shown greyed out with "Needs administrator", never hidden.</summary>
     public bool NeedsAdmin => Match is { Rule.NeedsAdmin: true } && !_session.IsElevated;
+    public string? AdminTip => NeedsAdmin ? Str.Get("NeedsAdministrator") : null;
     public bool CanRemove => Match is not null && !NeedsAdmin && !IsBusy && !IsScanning;
     public bool CanEstimate => IsComponentStore && !NeedsAdmin && !IsEstimating;
     public bool HasEstimate => EstimateText.Length > 0;
@@ -83,7 +84,9 @@ public sealed partial class ExploreViewModel : ObservableObject
     public string ConfirmText => Match is not { } m ? ""
         : m.Rule.Undoable && _session.Settings.UndoDays > 0
             ? $"{m.Rule.Consequence}\n\n{Str.Format("ConfirmUndo", _session.Settings.UndoDays)}"
-            : $"{m.Rule.Consequence}\n\n{Str.Get("CantUndo")}";
+            : m.Rule.Undoable // undo is Off: the files that would have gone to quarantine are deleted for good
+                ? $"{m.Rule.Consequence}\n\n{Str.Get("DeletedPermanently")}\n{Str.Get("CantUndo")}"
+                : $"{m.Rule.Consequence}\n\n{Str.Get("CantUndo")}";
 
     /// <summary>Scans the startup drive the first time the page loads; later loads keep the existing scan.</summary>
     public void Start()
@@ -179,7 +182,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     partial void OnMatchChanged(RuleMatch? value)
     {
         foreach (var p in (string[])[nameof(HasMatch), nameof(Label), nameof(LabelText), nameof(MatchTitle), nameof(Explanation),
-                     nameof(Consequence), nameof(IsComponentStore), nameof(NeedsAdmin), nameof(CanRemove), nameof(CanEstimate), nameof(SelectedSize)])
+                     nameof(Consequence), nameof(IsComponentStore), nameof(NeedsAdmin), nameof(AdminTip), nameof(CanRemove), nameof(CanEstimate), nameof(SelectedSize)])
             OnPropertyChanged(p);
     }
 
@@ -216,7 +219,7 @@ public sealed partial class ExploreViewModel : ObservableObject
             {
                 BusyText = Str.Get("UpdatingMap");
                 await _session.RescanFolderAsync(parent);
-                if (ZoomRoot is { } z && _session.Current is { } cur && FileTree.RootOf(z) != cur.Root) ResetZoom(cur.Root); // zoomed folder vanished
+                DropDetached();
                 MapChanged?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -225,6 +228,24 @@ public sealed partial class ExploreViewModel : ObservableObject
             ShowResult(e.Message, InfoBarSeverity.Warning); // the rescan failed; the removal result above already stands
         }
         finally { IsBusy = false; BusyText = ""; }
+    }
+
+    /// <summary>
+    /// After a rescan replaced part of the tree: zooms out to the nearest breadcrumb still in the live tree and
+    /// clears a selection that was replaced, so removed items are neither drawn nor offered for removal again.
+    /// </summary>
+    private void DropDetached()
+    {
+        if (_session.Current is not { } cur) return;
+        bool Live(FileNode n) => FileTree.RootOf(n) == cur.Root;
+        if (ZoomRoot is { } z && !Live(z))
+        {
+            var i = Crumbs.Count - 1;
+            while (i > 0 && !Live(Crumbs[i].Node)) i--;
+            if (Live(Crumbs[i].Node)) ZoomTo(i);
+            else ResetZoom(cur.Root);
+        }
+        if (Selected is { } s && !Live(s)) Selected = null;
     }
 
     /// <summary>Runs DISM /AnalyzeComponentStore (minutes) and shows "about X–Y GB (estimate)".</summary>
@@ -242,7 +263,7 @@ public sealed partial class ExploreViewModel : ObservableObject
                 ? Str.Format("EstimateResult", SizeFormat.Range(e.Low, e.High))
                 : Str.Get("EstimateFailed");
         }
-        catch (Exception e) when (e is InvalidOperationException or Win32Exception or IOException) { text = Str.Get("EstimateFailed"); }
+        catch (Exception) { text = Str.Get("EstimateFailed"); } // called from an async void handler: nothing may escape
         finally { IsEstimating = false; }
         if (Match == forMatch) EstimateText = text; // the user may have selected something else meanwhile
     }

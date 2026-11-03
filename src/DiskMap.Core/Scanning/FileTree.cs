@@ -8,6 +8,7 @@ public static class FileTree
     {
         var size = fresh.Size - target.Size;
         var files = fresh.FileCount - target.FileCount;
+        foreach (var old in target.Children) old.Parent = null; // detached nodes must no longer resolve to the live root
         target.Children.Clear();
         foreach (var c in fresh.Children) { c.Parent = target; target.Children.Add(c); }
         target.AccessDenied = fresh.AccessDenied;
@@ -22,6 +23,7 @@ public static class FileTree
         node.Parent = null;
     }
 
+    /// <summary>The top of the tree <paramref name="node"/> hangs from; for a detached node, the top of its detached branch.</summary>
     public static FileNode RootOf(FileNode node)
     {
         while (node.Parent is { } p) node = p;

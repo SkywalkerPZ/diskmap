@@ -71,11 +71,9 @@
                                     </StackPanel>
                                 </StackPanel>
 
-                                <!-- A disabled button shows no tooltip of its own, so the wrapper carries it. -->
-                                <Grid HorizontalAlignment="Left" Background="Transparent">
-                                    <ToolTipService.ToolTip>
-                                        <ToolTip x:Uid="NeedsAdminTip" IsEnabled="{x:Bind ViewModel.NeedsAdmin, Mode=OneWay}" />
-                                    </ToolTipService.ToolTip>
+                                <!-- A disabled button shows no tooltip of its own, so the wrapper carries it; null = no tooltip. -->
+                                <Grid HorizontalAlignment="Left" Background="Transparent"
+                                      ToolTipService.ToolTip="{x:Bind ViewModel.AdminTip, Mode=OneWay}">
                                     <Button x:Uid="RemoveButton" Style="{StaticResource AccentButtonStyle}" Click="OnRemoveClick"
                                             IsEnabled="{x:Bind ViewModel.CanRemove, Mode=OneWay}" />
                                 </Grid>
