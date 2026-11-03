@@ -21,15 +21,43 @@ public sealed partial class ScanSession : ObservableObject
         IsElevated = isElevated;
         Settings = settings;
         Rules = rules;
-        Removal = new RemovalService(settings, user, _windowsDir, isElevated, new ProcessRunner(), new ShellRecycleBin(),
+        _settingsStore = SettingsStoreFor(user);
+        Removal = BuildRemoval(settings);
+    }
+
+    private readonly SettingsStore _settingsStore;
+
+    public static SettingsStore SettingsStoreFor(UserContext user) => new(Path.Combine(user.LocalAppData, "DiskMap"));
+
+    private RemovalService BuildRemoval(AppSettings settings) =>
+        new(settings, User, _windowsDir, IsElevated, new ProcessRunner(), new ShellRecycleBin(),
             path => new DriveInfo(Path.GetPathRoot(Path.GetFullPath(path))!).AvailableFreeSpace, StoreFor);
+
+    /// <summary>Applies new settings immediately (removals and Explore see them at once), then saves; a failed save throws after the change took effect.</summary>
+    public void UpdateSettings(AppSettings settings)
+    {
+        Settings = settings;
+        Removal = BuildRemoval(settings);
+        _settingsStore.Save(settings);
+    }
+
+    /// <summary>Volume roots of fixed, ready drives that already have a quarantine folder; never creates one.</summary>
+    public static IEnumerable<string> QuarantineRoots()
+    {
+        foreach (var d in DriveInfo.GetDrives())
+        {
+            bool has;
+            try { has = d.DriveType == DriveType.Fixed && d.IsReady && Directory.Exists(Path.Combine(d.RootDirectory.FullName, "DiskMap Quarantine")); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { continue; } // one bad drive must not hide the rest
+            if (has) yield return d.RootDirectory.FullName;
+        }
     }
 
     public UserContext User { get; }
     public bool IsElevated { get; }
     public IReadOnlyList<Rule> Rules { get; }
-    public AppSettings Settings { get; }
-    public RemovalService Removal { get; }
+    public AppSettings Settings { get; private set; }
+    public RemovalService Removal { get; private set; }
 
     [ObservableProperty] public partial ScanResult? Current { get; private set; }
     [ObservableProperty] public partial IReadOnlyList<RuleMatch> Matches { get; private set; } = [];

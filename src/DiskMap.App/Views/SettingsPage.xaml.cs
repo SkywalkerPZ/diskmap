@@ -1,3 +1,4 @@
+using DiskMap.App.ViewModels;
 using Microsoft.UI.Xaml.Controls;
 
 namespace DiskMap.App.Views;
@@ -5,4 +6,6 @@ namespace DiskMap.App.Views;
 public sealed partial class SettingsPage : Page
 {
     public SettingsPage() => InitializeComponent();
+
+    public SettingsViewModel ViewModel { get; } = new();
 }

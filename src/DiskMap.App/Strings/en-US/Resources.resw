@@ -48,7 +48,44 @@
   <data name="ResultFreed" xml:space="preserve"><value>Freed {0}</value></data>
   <data name="ResultQuarantined" xml:space="preserve"><value>{0} moved to quarantine</value></data>
   <data name="ResultSkipped" xml:space="preserve"><value>, skipped {0} in use</value></data>
-  <data name="CleanUpPlaceholder.Text" xml:space="preserve"><value>Clean up</value></data>
-  <data name="QuarantinePlaceholder.Text" xml:space="preserve"><value>Quarantine</value></data>
-  <data name="SettingsPlaceholder.Text" xml:space="preserve"><value>Settings</value></data>
+  <data name="ScanFirst.Text" xml:space="preserve"><value>Scan a drive on the Explore tab first.</value></data>
+  <data name="NothingToClean.Text" xml:space="preserve"><value>Nothing to clean up right now.</value></data>
+  <data name="CleanButton" xml:space="preserve"><value>Clean {0}</value></data>
+  <data name="BulkTitle" xml:space="preserve"><value>Clean up these files?</value></data>
+  <data name="BulkSummary" xml:space="preserve"><value>{0} items, {1}.</value></data>
+  <data name="BulkUndo" xml:space="preserve"><value>You can restore these files from Quarantine for {0} days.</value></data>
+  <data name="BulkPermanent" xml:space="preserve"><value>These files will be deleted permanently.</value></data>
+  <data name="BulkConfirm" xml:space="preserve"><value>Clean</value></data>
+  <data name="Cleaning" xml:space="preserve"><value>Cleaning {0} of {1}…</value></data>
+  <data name="ResultFailed" xml:space="preserve"><value>. {0} items couldn't be cleaned.</value></data>
+  <data name="QuarantineHeader" xml:space="preserve"><value>{0} waiting to be deleted</value></data>
+  <data name="QuarantineSub.Text" xml:space="preserve"><value>Quarantined files still use space until they're deleted.</value></data>
+  <data name="EmptyNowButton.Content" xml:space="preserve"><value>Empty now</value></data>
+  <data name="EmptyConfirmTitle" xml:space="preserve"><value>Empty quarantine?</value></data>
+  <data name="EmptyConfirmBody" xml:space="preserve"><value>{0} will be deleted permanently. This can't be undone.</value></data>
+  <data name="EmptyConfirm" xml:space="preserve"><value>Delete</value></data>
+  <data name="EmptyDone" xml:space="preserve"><value>Quarantine emptied.</value></data>
+  <data name="EmptyPartial" xml:space="preserve"><value>Some items couldn't be deleted because they're in use. {0} is still waiting.</value></data>
+  <data name="EmptyFailed" xml:space="preserve"><value>Couldn't empty quarantine: {0}</value></data>
+  <data name="QuarantineEmpty.Text" xml:space="preserve"><value>Nothing is in quarantine.</value></data>
+  <data name="QuarantineCorrupt" xml:space="preserve"><value>The quarantine list on {0} couldn't be read, so some entries may be missing here. The files in the DiskMap Quarantine folder haven't been touched.</value></data>
+  <data name="UnknownOrigin" xml:space="preserve"><value>Unknown origin</value></data>
+  <data name="RemovedOn" xml:space="preserve"><value>Removed {0}</value></data>
+  <data name="RestoreButton.Content" xml:space="preserve"><value>Restore</value></data>
+  <data name="RestoredTo" xml:space="preserve"><value>Restored to {0}</value></data>
+  <data name="RestoreGone" xml:space="preserve"><value>That item is no longer in quarantine.</value></data>
+  <data name="RestoreUnknown" xml:space="preserve"><value>This item's original location isn't known, so it can't be restored automatically. You can empty it.</value></data>
+  <data name="RestoreMissing" xml:space="preserve"><value>The quarantined item is missing, so it can't be restored.</value></data>
+  <data name="RestoreFailed" xml:space="preserve"><value>Couldn't restore it: {0}</value></data>
+  <data name="UndoRadios.Header" xml:space="preserve"><value>Keep removed files so I can undo</value></data>
+  <data name="UndoOff.Content" xml:space="preserve"><value>Off</value></data>
+  <data name="UndoThree.Content" xml:space="preserve"><value>3 days</value></data>
+  <data name="UndoSeven.Content" xml:space="preserve"><value>7 days</value></data>
+  <data name="UndoNote.Text" xml:space="preserve"><value>When this is off, removed files are deleted permanently.</value></data>
+  <data name="ElevatedToggle.Header" xml:space="preserve"><value>Always start as administrator</value></data>
+  <data name="AboutHeader.Text" xml:space="preserve"><value>About</value></data>
+  <data name="VersionText" xml:space="preserve"><value>DiskMap version {0}</value></data>
+  <data name="LicenseText.Text" xml:space="preserve"><value>MIT License</value></data>
+  <data name="RepoLink.Content" xml:space="preserve"><value>DiskMap on GitHub</value></data>
+  <data name="SettingsSaveFailed" xml:space="preserve"><value>Couldn't save your settings: {0}</value></data>
 </root>

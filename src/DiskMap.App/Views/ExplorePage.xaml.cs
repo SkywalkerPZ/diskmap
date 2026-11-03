@@ -36,26 +36,9 @@ public sealed partial class ExplorePage : Page
 
     private async void OnEstimateClick(object sender, RoutedEventArgs e) => await ViewModel.EstimateAsync();
 
-    private bool _confirming;
-
     private async void OnRemoveClick(object sender, RoutedEventArgs e)
     {
-        if (_confirming) return; // a fast double-click must not open a second ContentDialog (that throws)
-        _confirming = true;
-        try
-        {
-            var dialog = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = Str.Format("ConfirmTitle", ViewModel.SelectedName),
-                Content = new TextBlock { Text = ViewModel.ConfirmText, TextWrapping = TextWrapping.Wrap },
-                PrimaryButtonText = Str.Get("ConfirmRemove"),
-                CloseButtonText = Str.Get("ConfirmCancel"),
-                DefaultButton = ContentDialogButton.Close,
-            };
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-        }
-        finally { _confirming = false; }
+        if (!await Confirmation.AskAsync(XamlRoot, Str.Format("ConfirmTitle", ViewModel.SelectedName), ViewModel.ConfirmText, Str.Get("ConfirmRemove"))) return;
         await ViewModel.RemoveAsync(); // the button is disabled while this runs (CanRemove checks IsBusy)
     }
 }

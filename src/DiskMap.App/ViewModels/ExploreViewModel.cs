@@ -80,13 +80,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     public bool CanEstimate => IsComponentStore && !NeedsAdmin && !IsEstimating;
     public bool HasEstimate => EstimateText.Length > 0;
 
-    /// <summary>Confirmation body: the consequence, plus the undo line that applies.</summary>
-    public string ConfirmText => Match is not { } m ? ""
-        : m.Rule.Undoable && _session.Settings.UndoDays > 0
-            ? $"{m.Rule.Consequence}\n\n{Str.Format("ConfirmUndo", _session.Settings.UndoDays)}"
-            : m.Rule.Undoable // undo is Off: the files that would have gone to quarantine are deleted for good
-                ? $"{m.Rule.Consequence}\n\n{Str.Get("DeletedPermanently")}\n{Str.Get("CantUndo")}"
-                : $"{m.Rule.Consequence}\n\n{Str.Get("CantUndo")}";
+    public string ConfirmText => Match is { } m ? Confirmation.Body(m.Rule, _session.Settings.UndoDays) : "";
 
     /// <summary>Scans the startup drive the first time the page loads; later loads keep the existing scan.</summary>
     public void Start()
@@ -132,6 +126,10 @@ public sealed partial class ExploreViewModel : ObservableObject
                 OnPropertyChanged(nameof(IsScanning));
                 OnPropertyChanged(nameof(CanChangeDrive));
                 OnPropertyChanged(nameof(CanRemove));
+                break;
+            case nameof(ScanSession.Matches): // another page may have rescanned part of the tree
+                DropDetached();
+                MapChanged?.Invoke(this, EventArgs.Empty);
                 break;
             case nameof(ScanSession.Current) when _session.Current is { } cur && (ZoomRoot is null || FileTree.RootOf(ZoomRoot) != cur.Root):
                 ResetZoom(cur.Root); // a new scan; an in-place rescan keeps the same root

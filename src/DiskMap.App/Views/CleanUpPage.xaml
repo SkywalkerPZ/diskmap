@@ -1,6 +1,73 @@
 <Page
     x:Class="DiskMap.App.Views.CleanUpPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <TextBlock x:Uid="CleanUpPlaceholder" Margin="24" />
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:DiskMap.App.Views"
+    xmlns:vm="using:DiskMap.App.ViewModels"
+    NavigationCacheMode="Required">
+    <Grid Padding="16,8,16,16" RowSpacing="8" RowDefinitions="Auto,*,Auto">
+        <InfoBar IsOpen="{x:Bind ViewModel.IsResultOpen, Mode=TwoWay}"
+                 Message="{x:Bind ViewModel.ResultMessage, Mode=OneWay}"
+                 Severity="{x:Bind ViewModel.ResultSeverity, Mode=OneWay}" />
+
+        <TextBlock Grid.Row="1" x:Uid="ScanFirst" TextWrapping="Wrap" Visibility="{x:Bind ViewModel.NoScan, Mode=OneWay}"
+                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        <TextBlock Grid.Row="1" x:Uid="NothingToClean" TextWrapping="Wrap" Visibility="{x:Bind ViewModel.NothingToClean, Mode=OneWay}"
+                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+        <ScrollViewer Grid.Row="1" Visibility="{x:Bind ViewModel.HasGroups, Mode=OneWay}">
+            <ItemsControl ItemsSource="{x:Bind ViewModel.Groups}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:CleanGroup">
+                        <Expander IsExpanded="True" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Margin="0,0,0,8">
+                            <Expander.Header>
+                                <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto,Auto">
+                                    <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" Text="{x:Bind Name}" />
+                                    <Border Grid.Column="1" CornerRadius="4" Padding="8,2" VerticalAlignment="Center"
+                                            Background="{x:Bind local:ExplorePage.BadgeBrush(Label)}">
+                                        <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="{x:Bind LabelText}" />
+                                    </Border>
+                                    <TextBlock Grid.Column="2" VerticalAlignment="Center" MinWidth="72" TextAlignment="Right" Text="{x:Bind TotalText}" />
+                                </Grid>
+                            </Expander.Header>
+                            <ItemsControl ItemsSource="{x:Bind Items}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:CleanItem">
+                                        <!-- A disabled control shows no tooltip of its own, so the row carries it; null = no tooltip. -->
+                                        <Grid ColumnSpacing="12" Padding="0,4" Background="Transparent" Opacity="{x:Bind RowOpacity}"
+                                              ColumnDefinitions="Auto,*,Auto,Auto,Auto"
+                                              ToolTipService.ToolTip="{x:Bind AdminTip}">
+                                            <CheckBox MinWidth="0" Padding="0" VerticalAlignment="Center" IsChecked="{x:Bind IsChecked, Mode=TwoWay}"
+                                                      IsEnabled="{x:Bind CanCheck}" Visibility="{x:Bind IsBulk}" />
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock TextWrapping="Wrap" IsTextSelectionEnabled="True" Text="{x:Bind Title}" />
+                                                <TextBlock x:Uid="NeedsAdminText" Style="{StaticResource CaptionTextBlockStyle}"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                           Visibility="{x:Bind NeedsAdmin}" />
+                                            </StackPanel>
+                                            <Border Grid.Column="2" CornerRadius="4" Padding="8,2" VerticalAlignment="Center"
+                                                    Background="{x:Bind local:ExplorePage.BadgeBrush(Label)}">
+                                                <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="{x:Bind LabelText}" />
+                                            </Border>
+                                            <TextBlock Grid.Column="3" VerticalAlignment="Center" MinWidth="72" TextAlignment="Right" Text="{x:Bind SizeText}" />
+                                            <Button Grid.Column="4" x:Uid="RemoveButton" Tag="{x:Bind}" Click="OnRemoveClick"
+                                                    IsEnabled="{x:Bind CanRemove, Mode=OneWay}" Visibility="{x:Bind ShowRemove}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Expander>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <Grid Grid.Row="2" ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto" Visibility="{x:Bind ViewModel.HasGroups, Mode=OneWay}">
+            <ProgressRing Width="16" Height="16" IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
+            <TextBlock Grid.Column="1" VerticalAlignment="Center" TextWrapping="Wrap" Text="{x:Bind ViewModel.BusyText, Mode=OneWay}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Button Grid.Column="2" Style="{StaticResource AccentButtonStyle}" Click="OnCleanClick"
+                    Content="{x:Bind ViewModel.CleanText, Mode=OneWay}" IsEnabled="{x:Bind ViewModel.CanClean, Mode=OneWay}" />
+        </Grid>
+    </Grid>
 </Page>

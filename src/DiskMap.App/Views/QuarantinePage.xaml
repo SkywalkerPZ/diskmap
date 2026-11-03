@@ -1,6 +1,42 @@
 <Page
     x:Class="DiskMap.App.Views.QuarantinePage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <TextBlock x:Uid="QuarantinePlaceholder" Margin="24" />
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:DiskMap.App.ViewModels">
+    <Grid Padding="16,8,16,16" RowSpacing="8" RowDefinitions="Auto,Auto,Auto,*">
+        <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto">
+            <StackPanel>
+                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="{x:Bind ViewModel.Header, Mode=OneWay}" />
+                <TextBlock x:Uid="QuarantineSub" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+            <Button Grid.Column="1" x:Uid="EmptyNowButton" VerticalAlignment="Center" Click="OnEmptyClick"
+                    IsEnabled="{x:Bind ViewModel.CanEmpty, Mode=OneWay}" />
+        </Grid>
+
+        <InfoBar Grid.Row="1" Severity="Warning" IsClosable="False" IsOpen="{x:Bind ViewModel.IsCorrupt, Mode=OneWay}"
+                 Message="{x:Bind ViewModel.CorruptMessage, Mode=OneWay}" />
+        <InfoBar Grid.Row="2" IsOpen="{x:Bind ViewModel.IsResultOpen, Mode=TwoWay}"
+                 Message="{x:Bind ViewModel.ResultMessage, Mode=OneWay}"
+                 Severity="{x:Bind ViewModel.ResultSeverity, Mode=OneWay}" />
+
+        <TextBlock Grid.Row="3" x:Uid="QuarantineEmpty" Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay}"
+                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        <ScrollViewer Grid.Row="3">
+            <ItemsControl ItemsSource="{x:Bind ViewModel.Items}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:QuarantineItem">
+                        <Grid ColumnSpacing="12" Padding="0,6" ColumnDefinitions="*,Auto,Auto">
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock TextWrapping="Wrap" IsTextSelectionEnabled="True" Text="{x:Bind PathText}" />
+                                <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="{x:Bind RemovedText}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" VerticalAlignment="Center" MinWidth="72" TextAlignment="Right" Text="{x:Bind SizeText}" />
+                            <Button Grid.Column="2" x:Uid="RestoreButton" Tag="{x:Bind}" Click="OnRestoreClick" Visibility="{x:Bind CanRestore}" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
 </Page>

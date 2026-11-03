@@ -2,7 +2,6 @@ using DiskMap.App.ViewModels;
 using DiskMap.Core;
 using DiskMap.Core.Quarantine;
 using DiskMap.Core.Rules;
-using DiskMap.Core.Settings;
 using Microsoft.UI.Xaml;
 
 namespace DiskMap.App;
@@ -26,7 +25,7 @@ public partial class App : Application
         var i = Array.IndexOf(argv, "--drive");
         StartupDrive = i >= 0 && i + 1 < argv.Length ? argv[i + 1] : null;
 
-        var settings = new SettingsStore(Path.Combine(user.LocalAppData, "DiskMap")).Load();
+        var settings = ScanSession.SettingsStoreFor(user).Load();
         var elevated = Elevation.IsElevated();
         if (settings.AlwaysStartElevated && !elevated) Elevation.RelaunchElevated(user, StartupDrive); // false = declined, carry on
 
@@ -42,14 +41,9 @@ public partial class App : Application
 
     private static void PurgeQuarantines(int undoDays)
     {
-        foreach (var d in DriveInfo.GetDrives())
+        foreach (var root in ScanSession.QuarantineRoots())
         {
-            try
-            {
-                if (d.DriveType != DriveType.Fixed || !d.IsReady) continue;
-                if (Directory.Exists(Path.Combine(d.RootDirectory.FullName, "DiskMap Quarantine")))
-                    new QuarantineStore(d.RootDirectory.FullName).PurgeExpired(undoDays, DateTime.UtcNow);
-            }
+            try { new QuarantineStore(root).PurgeExpired(undoDays, DateTime.UtcNow); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } // one bad drive must not block startup
         }
     }
