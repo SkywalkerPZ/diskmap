@@ -35,7 +35,7 @@
   <data name="RemoveButton.Content" xml:space="preserve"><value>Remove</value></data>
   <data name="NeedsAdministrator" xml:space="preserve"><value>Needs administrator</value></data>
   <data name="DeletedPermanently" xml:space="preserve"><value>Undo is off, so the files will be deleted permanently.</value></data>
-  <data name="NeedsAdminText.Text" xml:space="preserve"><value>Needs administrator</value></data>
+  <data name="RecycleBinOtherAccount" xml:space="preserve"><value>DiskMap is running as a different account, so it can only reach that account's Recycle Bin. Start DiskMap without administrator rights to empty yours.</value></data>
   <data name="OpenInExplorerButton.Content" xml:space="preserve"><value>Open in Explorer</value></data>
   <data name="ConfirmTitle" xml:space="preserve"><value>Remove {0}?</value></data>
   <data name="ConfirmRemove" xml:space="preserve"><value>Remove</value></data>
@@ -88,5 +88,7 @@
   <data name="LicenseText.Text" xml:space="preserve"><value>MIT License</value></data>
   <data name="RepoLink.Content" xml:space="preserve"><value>DiskMap on GitHub</value></data>
   <data name="SettingsSaveFailed" xml:space="preserve"><value>Couldn't save your settings: {0}</value></data>
+  <data name="QuarantineUntrusted" xml:space="preserve"><value>DiskMap isn't using the quarantine folder on {0} because its permissions aren't the ones DiskMap sets. Nothing in it was changed. An administrator can delete the DiskMap Quarantine folder there so DiskMap creates a new one.</value></data>
+  <data name="CrashMessage" xml:space="preserve"><value>DiskMap ran into an unexpected problem and has to close. Details were saved to crash.log in the DiskMap folder of your local app data.</value></data>
   <data name="QuarantineLoadFailed" xml:space="preserve"><value>Couldn't read the quarantine: {0}</value></data>
 </root>

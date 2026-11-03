@@ -74,10 +74,10 @@ public sealed partial class ExploreViewModel : ObservableObject
     public string Consequence => Match?.Rule.Consequence ?? "";
     public bool IsComponentStore => Match?.Rule.Method == RemovalMethod.DismComponentCleanup;
     /// <summary>Shown greyed out with "Needs administrator", never hidden.</summary>
-    public bool NeedsAdmin => Match is { Rule.NeedsAdmin: true } && !_session.IsElevated;
-    public string? AdminTip => NeedsAdmin ? Str.Get("NeedsAdministrator") : null;
-    public bool CanRemove => Match is not null && !NeedsAdmin && !IsBusy && !IsScanning && !_session.IsRemoving;
-    public bool CanEstimate => IsComponentStore && !NeedsAdmin && !IsEstimating;
+    public string? UnavailableText => Match is { } m ? _session.UnavailableReason(m.Rule) : null;
+    public bool IsUnavailable => UnavailableText is not null;
+    public bool CanRemove => Match is not null && !IsUnavailable && !IsBusy && !IsScanning && !_session.IsRemoving;
+    public bool CanEstimate => IsComponentStore && !IsUnavailable && !IsEstimating;
     public bool HasEstimate => EstimateText.Length > 0;
 
     public string ConfirmText => Match is { } m ? Confirmation.Body(m.Rule, _session.Settings.UndoDays) : "";
@@ -181,7 +181,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     partial void OnMatchChanged(RuleMatch? value)
     {
         foreach (var p in (string[])[nameof(HasMatch), nameof(Label), nameof(LabelText), nameof(MatchTitle), nameof(Explanation),
-                     nameof(Consequence), nameof(IsComponentStore), nameof(NeedsAdmin), nameof(AdminTip), nameof(CanRemove), nameof(CanEstimate), nameof(SelectedSize)])
+                     nameof(Consequence), nameof(IsComponentStore), nameof(IsUnavailable), nameof(UnavailableText), nameof(CanRemove), nameof(CanEstimate), nameof(SelectedSize)])
             OnPropertyChanged(p);
     }
 
@@ -257,7 +257,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         string text;
         try
         {
-            var o = await new ProcessRunner().RunAsync("DISM", "/Online /Cleanup-Image /AnalyzeComponentStore", CancellationToken.None);
+            var o = await new ProcessRunner().RunAsync(RemovalService.SystemTool("dism.exe"), "/Online /Cleanup-Image /AnalyzeComponentStore", CancellationToken.None);
             text = ComponentStoreEstimate.Parse(o.StdOut) is { } e
                 ? Str.Format("EstimateResult", SizeFormat.Range(e.Low, e.High))
                 : Str.Get("EstimateFailed");

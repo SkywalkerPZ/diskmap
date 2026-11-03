@@ -36,14 +36,14 @@
                                         <!-- A disabled control shows no tooltip of its own, so the row carries it; null = no tooltip. -->
                                         <Grid ColumnSpacing="12" Padding="0,4" Background="Transparent" Opacity="{x:Bind RowOpacity}"
                                               ColumnDefinitions="Auto,*,Auto,Auto,Auto"
-                                              ToolTipService.ToolTip="{x:Bind AdminTip}">
+                                              ToolTipService.ToolTip="{x:Bind UnavailableText}">
                                             <CheckBox MinWidth="0" Padding="0" VerticalAlignment="Center" IsChecked="{x:Bind IsChecked, Mode=TwoWay}"
                                                       IsEnabled="{x:Bind CanCheck}" Visibility="{x:Bind IsBulk}" />
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                 <TextBlock TextWrapping="Wrap" IsTextSelectionEnabled="True" Text="{x:Bind Title}" />
-                                                <TextBlock x:Uid="NeedsAdminText" Style="{StaticResource CaptionTextBlockStyle}"
+                                                <TextBlock Text="{x:Bind UnavailableText}" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                           Visibility="{x:Bind NeedsAdmin}" />
+                                                           Visibility="{x:Bind IsUnavailable}" />
                                             </StackPanel>
                                             <Border Grid.Column="2" CornerRadius="4" Padding="8,2" VerticalAlignment="Center"
                                                     Background="{x:Bind local:ExplorePage.BadgeBrush(Label)}">

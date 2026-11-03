@@ -55,8 +55,13 @@ public sealed partial class QuarantineViewModel : ObservableObject
             foreach (var e in s.Entries.OrderByDescending(e => e.RemovedUtc)) Items.Add(new QuarantineItem(e, s));
         Header = Str.Format("QuarantineHeader", SizeFormat.Format(Total));
         var bad = roots.Where((_, i) => _stores[i].IsCorrupt).ToList();
-        IsCorrupt = bad.Count > 0;
-        CorruptMessage = Str.Format("QuarantineCorrupt", string.Join(", ", bad));
+        var refused = roots.Where((_, i) => _stores[i].Untrusted is not null).ToList();
+        IsCorrupt = bad.Count > 0 || refused.Count > 0;
+        CorruptMessage = string.Join(" ", new[]
+        {
+            bad.Count > 0 ? Str.Format("QuarantineCorrupt", string.Join(", ", bad)) : null,
+            refused.Count > 0 ? Str.Format("QuarantineUntrusted", string.Join(", ", refused)) : null,
+        }.OfType<string>());
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(CanEmpty));
     }
@@ -76,7 +81,7 @@ public sealed partial class QuarantineViewModel : ObservableObject
         catch (KeyNotFoundException) { Show(Str.Get("RestoreGone"), InfoBarSeverity.Warning); }
         catch (InvalidOperationException) { Show(Str.Get("RestoreUnknown"), InfoBarSeverity.Warning); }
         catch (FileNotFoundException) { Show(Str.Get("RestoreMissing"), InfoBarSeverity.Warning); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Show(Str.Format("RestoreFailed", e.Message), InfoBarSeverity.Warning); }
+        catch (Exception e) { Show(Str.Format("RestoreFailed", e.Message), InfoBarSeverity.Warning); } // async-void caller: nothing may escape
         finally
         {
             IsBusy = false;
@@ -105,6 +110,7 @@ public sealed partial class QuarantineViewModel : ObservableObject
             else if (Total > 0) Show(Str.Format("EmptyPartial", SizeFormat.Format(Total)), InfoBarSeverity.Warning);
             else Show(Str.Get("EmptyDone"), InfoBarSeverity.Success);
         }
+        catch (Exception e) { Show(Str.Format("EmptyFailed", e.Message), InfoBarSeverity.Warning); } // async-void caller: nothing may escape
         finally
         {
             IsBusy = false;

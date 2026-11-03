@@ -9,23 +9,26 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace DiskMap.App.ViewModels;
 
-public sealed partial class CleanItem(RuleMatch match, long bytes, bool elevated) : ObservableObject
+/// <summary>unavailable: why it can't be removed in this session (shown greyed out with that text), or null.</summary>
+public sealed partial class CleanItem(RuleMatch match, long bytes, string? unavailable) : ObservableObject
 {
     public RuleMatch Match { get; } = match;
     public long Bytes { get; } = bytes;
     public bool IsComponentStore => Match.Rule.Method == RemovalMethod.DismComponentCleanup;
     public string Title => Match.Rule.Method == RemovalMethod.Quarantine ? Match.Node.FullPath : Match.Rule.Title;
     /// <summary>Never an exact number for the component store: Windows shares those files.</summary>
-    public string SizeText => IsComponentStore ? Str.Get("SizeAfterCleanup") : SizeFormat.Format(Bytes);
+    public string SizeText => IsComponentStore ? Str.Get("SizeAfterCleanup")
+        : IsUnavailable && Match.Rule.Method == RemovalMethod.EmptyRecycleBin ? "" // another account's bin: its size isn't known
+        : SizeFormat.Format(Bytes);
     public SafetyLabel Label => Match.Rule.Label;
     public string LabelText => Str.Get("Label" + Label);
     public bool IsBulk => RemovalService.IsBulkEligible(Match.Rule);
-    public bool NeedsAdmin => Match.Rule.NeedsAdmin && !elevated;
-    public string? AdminTip => NeedsAdmin ? Str.Get("NeedsAdministrator") : null;
-    public double RowOpacity => NeedsAdmin ? 0.5 : 1;
-    public bool CanCheck => IsBulk && !NeedsAdmin;
+    public bool IsUnavailable => unavailable is not null;
+    public string? UnavailableText => unavailable;
+    public double RowOpacity => IsUnavailable ? 0.5 : 1;
+    public bool CanCheck => IsBulk && !IsUnavailable;
     public bool ShowRemove => !IsBulk;
-    public bool CanRemove => IsIdle && !NeedsAdmin;
+    public bool CanRemove => IsIdle && !IsUnavailable;
 
     [ObservableProperty] public partial bool IsChecked { get; set; }
     [ObservableProperty] public partial bool IsIdle { get; set; } = true;
@@ -80,14 +83,16 @@ public sealed partial class CleanUpViewModel : ObservableObject
         foreach (var old in AllItems) prior.TryAdd(KeyOf(old), old.IsChecked);
         Groups.Clear();
         var matches = _session.Matches;
-        long bin = matches.Any(m => m.Rule.Method == RemovalMethod.EmptyRecycleBin) ? BinSize() : 0;
+        var binRule = matches.FirstOrDefault(m => m.Rule.Method == RemovalMethod.EmptyRecycleBin)?.Rule;
+        long bin = binRule is not null && _session.UnavailableReason(binRule) is null ? BinSize() : 0;
         var items = new List<CleanItem>();
         foreach (var m in matches)
         {
             var isBin = m.Rule.Method == RemovalMethod.EmptyRecycleBin;
-            if (isBin && bin == 0) continue; // nothing to empty
-            var item = new CleanItem(m, isBin ? bin : m.Node.Size, _session.IsElevated);
-            item.IsChecked = item.CanCheck && (!prior.TryGetValue(KeyOf(item), out var was) || was); // greyed-out (needs administrator) items are never ticked
+            var why = _session.UnavailableReason(m.Rule);
+            if (isBin && why is null && bin == 0) continue; // nothing to empty
+            var item = new CleanItem(m, isBin ? bin : m.Node.Size, why);
+            item.IsChecked = item.CanCheck && (!prior.TryGetValue(KeyOf(item), out var was) || was); // greyed-out (unavailable) items are never ticked
             item.PropertyChanged += OnItemChanged;
             items.Add(item);
         }
@@ -112,7 +117,7 @@ public sealed partial class CleanUpViewModel : ObservableObject
     private static long BinSize()
     {
         try { return new ShellRecycleBin().SizeBytes(); }
-        catch (ExternalException) { return 0; }
+        catch (Exception) { return 0; } // any shell failure only hides the item; it must never break the page
     }
 
     private void OnItemChanged(object? sender, PropertyChangedEventArgs e)

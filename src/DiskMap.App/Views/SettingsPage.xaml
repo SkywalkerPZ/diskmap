@@ -22,7 +22,7 @@
                 <TextBlock x:Uid="AboutHeader" Style="{StaticResource BodyStrongTextBlockStyle}" />
                 <TextBlock Text="{x:Bind ViewModel.VersionText}" />
                 <TextBlock x:Uid="LicenseText" />
-                <HyperlinkButton x:Uid="RepoLink" Padding="0" NavigateUri="https://github.com/OWNER/diskmap" />
+                <HyperlinkButton x:Uid="RepoLink" Padding="0" NavigateUri="https://github.com/SkywalkerPZ/diskmap" />
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

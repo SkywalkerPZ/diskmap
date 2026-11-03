@@ -73,13 +73,13 @@
 
                                 <!-- A disabled button shows no tooltip of its own, so the wrapper carries it; null = no tooltip. -->
                                 <Grid HorizontalAlignment="Left" Background="Transparent"
-                                      ToolTipService.ToolTip="{x:Bind ViewModel.AdminTip, Mode=OneWay}">
+                                      ToolTipService.ToolTip="{x:Bind ViewModel.UnavailableText, Mode=OneWay}">
                                     <Button x:Uid="RemoveButton" Style="{StaticResource AccentButtonStyle}" Click="OnRemoveClick"
                                             IsEnabled="{x:Bind ViewModel.CanRemove, Mode=OneWay}" />
                                 </Grid>
-                                <TextBlock x:Uid="NeedsAdminText" Style="{StaticResource CaptionTextBlockStyle}"
+                                <TextBlock Text="{x:Bind ViewModel.UnavailableText, Mode=OneWay}" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           Visibility="{x:Bind ViewModel.NeedsAdmin, Mode=OneWay}" />
+                                           Visibility="{x:Bind ViewModel.IsUnavailable, Mode=OneWay}" />
                             </StackPanel>
 
                             <Button x:Uid="OpenInExplorerButton" Margin="0,8,0,0" Click="OnOpenClick" />

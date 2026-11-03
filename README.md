@@ -56,10 +56,10 @@ It never follows junctions or symlinks, during the scan or during removal, and i
 
 "Keep removed files so I can undo" has three values: Off, 3 days, or 7 days. The default is 3 days.
 
-- Removed files are moved into a hidden `DiskMap Quarantine` folder at the root of the same drive, so the move is an instant rename. A small manifest records the original path, size and time, so Restore puts things back exactly.
+- Removed files are moved into a hidden `DiskMap Quarantine` folder at the root of the same drive, so the move is an instant rename. Each Windows account gets its own subfolder there that only it and administrators can open, and DiskMap refuses to use a quarantine folder whose permissions it didn't set itself. A small manifest records the original path, size and time, so Restore puts things back exactly.
 - Quarantined files still take up space until they are deleted. The Quarantine tab shows the total and has an "Empty now" button.
 - Expired items are deleted when the app starts. There is no background service.
-- Turning undo Off affects only new removals. Items already in quarantine stay for up to 7 days, or until you press "Empty now".
+- Each item keeps the undo period it was removed with. Turning undo Off (or shortening it) affects only new removals: items already in quarantine stay for their own 3 or 7 days, or until you press "Empty now".
 - With undo Off, a removal deletes permanently, and its confirmation says so.
 
 Three items can't be undone: the hibernation file, Windows update leftovers, and the Recycle Bin. They always ask for confirmation once, with a "This can't be undone" line, whatever the undo setting is. They are removed one at a time and are never part of a bulk removal.
@@ -81,14 +81,14 @@ DiskMap makes no network connections. There is no telemetry, no account and no u
 
 ## Download
 
-Releases are a portable zip, `DiskMap-<version>-win-x64.zip`, on the GitHub Releases page of https://github.com/OWNER/diskmap. The app is not code-signed yet, so Windows SmartScreen may warn on first run.
+Releases are a portable zip, `DiskMap-<version>-win-x64.zip`, on the GitHub Releases page of https://github.com/SkywalkerPZ/diskmap. The app is not code-signed yet, so Windows SmartScreen may warn on first run.
 
 ## Build from source
 
 You need the .NET 10 SDK (see `global.json`) and Windows.
 
 ```powershell
-git clone https://github.com/OWNER/diskmap
+git clone https://github.com/SkywalkerPZ/diskmap
 cd diskmap
 dotnet test tests/DiskMap.Core.Tests
 ./build/publish.ps1
