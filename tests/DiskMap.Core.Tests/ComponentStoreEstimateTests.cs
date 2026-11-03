@@ -29,4 +29,20 @@ public class ComponentStoreEstimateTests
         Assert.Null(ComponentStoreEstimate.Parse("Sicherungen und deaktivierte Features : 6,10 GB\nCache und temporaere Daten : 2,05 GB"));
         Assert.Null(ComponentStoreEstimate.Parse(""));
     }
+
+    [Theory]
+    [InlineData("1,23 GB", 1.23)]
+    [InlineData("1.23 GB", 1.23)]
+    [InlineData("1,234.50 GB", 1234.5)]
+    [InlineData("1.234,50 GB", 1234.5)]
+    [InlineData("1\u00A0234,5 GB", 1234.5)]
+    [InlineData("1,234 GB", 1234)]
+    [InlineData("12 GB", 12)]
+    public void ComponentStoreEstimate_ParsesNumbersInAnyLocale(string value, double gb)
+    {
+        var text = $"Backups and Disabled Features : 0 GB\nCache and Temporary Data : {value}";
+        var (low, high) = ComponentStoreEstimate.Parse(text)!.Value;
+        Assert.Equal((long)Math.Round(gb * GB), low);
+        Assert.Equal(low, high);
+    }
 }

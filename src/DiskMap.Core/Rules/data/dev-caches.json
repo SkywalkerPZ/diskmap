@@ -13,5 +13,5 @@
     "{UserProfile}\\.nuget\\packages"
   ],
   "folderNames": ["node_modules", ".gradle"],
-  "requireSibling": ["package.json", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"]
+  "requireSibling": ["package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "bun.lock", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"]
 }

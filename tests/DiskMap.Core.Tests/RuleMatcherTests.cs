@@ -24,7 +24,7 @@ public class RuleMatcherTests
         using var fx = new Fixture();
         var nm = Path.Combine("Users", "tester", "proj", "node_modules");
         fx.File(Path.Combine(nm, "a.js"), 10);
-        fx.File(Path.Combine("Users", "tester", "proj", "package.json"), 10);
+        fx.File(Path.Combine("Users", "tester", "proj", "package-lock.json"), 10);
         var m = Assert.Single(await Match(fx), x => x.Rule.Id == "dev-caches");
         Assert.Equal(Path.Combine(fx.Root, nm), m.Node.FullPath);
     }
@@ -72,7 +72,7 @@ public class RuleMatcherTests
         using var fx = new Fixture();
         fx.File(Path.Combine("Users", "tester", "p", "node_modules", "x", "node_modules", "a.js"), 10);
         fx.File(Path.Combine("Users", "tester", "p", "node_modules", "x", "package.json"), 10);
-        fx.File(Path.Combine("Users", "tester", "p", "package.json"), 10);
+        fx.File(Path.Combine("Users", "tester", "p", "package-lock.json"), 10);
         Assert.Single(await Match(fx), x => x.Rule.Id == "dev-caches");
     }
 
@@ -121,7 +121,7 @@ public class RuleMatcherTests
         foreach (var d in dirs)
         {
             fx.File(Path.Combine(d, "a"), 10);
-            fx.File(Path.Combine(Path.GetDirectoryName(d)!, "package.json"), 10);
+            fx.File(Path.Combine(Path.GetDirectoryName(d)!, "package-lock.json"), 10);
             fx.File(Path.Combine(Path.GetDirectoryName(d)!, "build.gradle"), 10);
         }
         Assert.DoesNotContain(await Match(fx), x => x.Rule.Id == "dev-caches");
@@ -151,5 +151,27 @@ public class RuleMatcherTests
         Assert.False(SafetyRails.CanRemove("C:" + Path.DirectorySeparatorChar + "$Recycle.Bin", rb, u, Win(fx), out _));
         Assert.False(SafetyRails.CanRemove(Path.Combine("C:" + Path.DirectorySeparatorChar, "$Recycle.Bin", "S-1-5-21-9", "x"), rb, u, Win(fx), out _));
         Assert.DoesNotContain(await Match(fx, u), x => x.Rule.Id == "recycle-bin"); // and must not throw
+    }
+
+    [Fact]
+    public async Task NodeModules_PackageJsonWithoutLockfile_DoesNotMatch()
+    {
+        using var fx = new Fixture();
+        fx.File(Path.Combine("Users", "tester", "proj", "node_modules", "a.js"), 10);
+        fx.File(Path.Combine("Users", "tester", "proj", "package.json"), 10);
+        Assert.DoesNotContain(await Match(fx), x => x.Rule.Id == "dev-caches");
+    }
+
+    [Fact]
+    public async Task PortableElectronApp_NodeModules_IsNeverMatched()
+    {
+        // an unzipped VS Code: resources\app holds package.json (and even a lockfile) next to its runtime node_modules
+        using var fx = new Fixture();
+        var app = Path.Combine("Users", "tester", "Tools", "VSCode-win32-x64", "resources", "app");
+        fx.File(Path.Combine(app, "node_modules", "a.js"), 10);
+        fx.File(Path.Combine(app, "package.json"), 10);
+        fx.File(Path.Combine(app, "package-lock.json"), 10);
+        Assert.DoesNotContain(await Match(fx), x => x.Rule.Id == "dev-caches");
+        Assert.False(SafetyRails.CanRemove(Path.Combine(fx.Root, app, "node_modules"), Rules.Single(r => r.Id == "dev-caches"), fx.User, Win(fx), out _));
     }
 }

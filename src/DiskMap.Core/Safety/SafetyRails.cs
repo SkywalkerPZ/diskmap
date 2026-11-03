@@ -114,6 +114,10 @@ public static class SafetyRails
         if (rule.FolderNames.Count == 0 || fileRule || !IsPrefix(profile, p) || p.Length == profile.Length) return -1;
         // installed software and tool configs live here; their node_modules/.gradle do not come back on a build
         if (IsPrefix(Segs(user.AppData), p) || IsPrefix(Segs(user.LocalAppData), p) || p[profile.Length].StartsWith('.')) return -1;
+        if (string.Equals(p[profile.Length], "AppData", StringComparison.OrdinalIgnoreCase)) return -1; // incl. LocalLow
+        // a portable Electron app (e.g. unzipped VS Code) ships its runtime node_modules in resources/app
+        for (var i = profile.Length; i + 1 < p.Length; i++)
+            if (string.Equals(p[i], "resources", StringComparison.OrdinalIgnoreCase) && string.Equals(p[i + 1], "app", StringComparison.OrdinalIgnoreCase)) return -1;
         for (var i = profile.Length; i < p.Length; i++)
         {
             if (!rule.FolderNames.Contains(p[i], StringComparer.OrdinalIgnoreCase)) continue;

@@ -119,4 +119,19 @@ public class SafetyRailsTests
         var missing = Path.Combine(Path.GetTempPath(), "nope-" + Guid.NewGuid());
         Assert.Equal(missing, SafetyRails.LongForm(missing));
     }
+
+    [Fact]
+    public void Rails_FolderNameRule_RefusesEverythingUnderAppData_IncludingLocalLow()
+    {
+        using var fx = new Fixture();
+        var w = Path.Combine(fx.Root, "Windows");
+        var proj = fx.Dir(Path.Combine("Users", "tester", "AppData", "LocalLow", "Some App", "proj"));
+        File.WriteAllText(Path.Combine(proj, "package-lock.json"), "{}");
+        var nm = Directory.CreateDirectory(Path.Combine(proj, "node_modules")).FullName;
+        Assert.False(SafetyRails.CanRemove(nm, R("dev-caches"), fx.User, w, out _));
+        // the same project outside AppData is fine
+        var ok = fx.Dir(Path.Combine("Users", "tester", "code", "proj"));
+        File.WriteAllText(Path.Combine(ok, "package-lock.json"), "{}");
+        Assert.True(SafetyRails.CanRemove(Directory.CreateDirectory(Path.Combine(ok, "node_modules")).FullName, R("dev-caches"), fx.User, w, out var why), why);
+    }
 }
