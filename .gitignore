@@ -3,3 +3,6 @@ obj/
 .superpowers/
 *.user
 .vs/
+artifacts/
+dotnet-home/
+nugetpackages/
