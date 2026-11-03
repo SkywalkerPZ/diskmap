@@ -28,7 +28,8 @@ public sealed class RemovalService(AppSettings settings, UserContext user, strin
                 RemovalMethod.Quarantine => await Task.Run(() => RemovePath(match, ct), ct),
                 RemovalMethod.DismComponentCleanup => await RunTool("DISM", "/Online /Cleanup-Image /StartComponentCleanup /ResetBase", ct),
                 RemovalMethod.PowercfgHibernateOff => await RunTool("powercfg", "/hibernate off", ct),
-                _ => await Task.Run(EmptyBin, ct),
+                RemovalMethod.EmptyRecycleBin => await Task.Run(EmptyBin, ct),
+                _ => throw new InvalidOperationException("Unknown removal method " + rule.Method),
             };
         }
         catch (OperationCanceledException) { throw; }
@@ -56,6 +57,15 @@ public sealed class RemovalService(AppSettings settings, UserContext user, strin
         return new(true, Math.Max(0, freeBytes(vol) - before), 0, 0, null);
     }
 
+    private sealed class Ctx(Rule rule, QuarantineStore? store)
+    {
+        public Rule Rule = rule;
+        public QuarantineStore? Store = store; // null = permanent delete
+        public long Quarantined, Skipped;
+        public bool Any;
+        public string? Reason, Error;
+    }
+
     private RemovalResult RemovePath(RuleMatch match, CancellationToken ct)
     {
         var rule = match.Rule;
@@ -64,7 +74,8 @@ public sealed class RemovalService(AppSettings settings, UserContext user, strin
         var vol = Path.GetPathRoot(path)!;
 
         var items = new List<(string Path, long Size)>();
-        if (IsAnchor(path, rule))
+        var anchor = IsAnchor(path, rule);
+        if (anchor)
         {
             // the anchor folder stays (apps expect it); only its contents go
             foreach (var c in Directory.EnumerateFileSystemEntries(path))
@@ -76,30 +87,12 @@ public sealed class RemovalService(AppSettings settings, UserContext user, strin
             items.Add((path, match.Node.Size));
         }
 
+        var ctx = new Ctx(rule, undo ? storeFor(vol) : null);
         var before = freeBytes(vol);
-        long quarantined = 0, skipped = 0;
-        var removedAny = false;
-        string? firstReason = null;
-        foreach (var (p, size) in items)
-        {
-            ct.ThrowIfCancellationRequested();
-            if (!SafetyRails.CanRemove(p, rule, user, windowsDir, out var reason)) { firstReason ??= reason; skipped += size; continue; }
-            if (undo)
-            {
-                var (q, s) = Quarantine(p, size, rule.Id, vol);
-                quarantined += q; skipped += s;
-                removedAny |= q > 0 || s == 0;
-            }
-            else
-            {
-                var s = DeleteTree(p);
-                skipped += s;
-                removedAny |= s == 0 || s < size;
-            }
-        }
+        foreach (var (p, size) in items) Unit(ctx, p, size, anchor, ct);
         var freed = undo ? 0 : Math.Max(0, freeBytes(vol) - before);
-        if (removedAny || skipped == 0) return new(true, freed, quarantined, skipped, null);
-        return new(false, freed, quarantined, skipped, firstReason ?? "Nothing could be removed (files in use).");
+        if (ctx.Any || ctx.Skipped == 0) return new(true, freed, ctx.Quarantined, ctx.Skipped, null);
+        return new(false, freed, ctx.Quarantined, ctx.Skipped, ctx.Reason ?? ctx.Error ?? "Nothing could be removed (files in use).");
     }
 
     private bool IsAnchor(string path, Rule rule)
@@ -109,62 +102,67 @@ public sealed class RemovalService(AppSettings settings, UserContext user, strin
         return rule.Paths.Any(t => SafetyRails.Anchor(t, user, windowsDir) is { } a && a.Length == p.Length && SafetyRails.IsPrefix(a, p));
     }
 
-    // Whole item by rename first; if something is in use, move each file on its own and leave the locked ones.
-    private (long Quarantined, long Skipped) Quarantine(string path, long size, string ruleId, string vol)
-    {
-        var store = storeFor(vol);
-        try { store.Add(path, size, ruleId); return (size, 0); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+    private static bool Gone(Exception e) => e is FileNotFoundException or DirectoryNotFoundException;
 
-        var attrs = File.GetAttributes(path);
-        if ((attrs & FileAttributes.Directory) == 0 || (attrs & FileAttributes.ReparsePoint) != 0) return (0, size);
-        long q = 0, s = 0;
-        foreach (var f in Leaves(path))
-        {
-            var len = Measure(f);
-            try { store.Add(f, len, ruleId); q += len; }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { s += Math.Max(len, 1); }
-        }
-        PruneEmpty(path);
-        return (q, s);
+    // Sharing violation, lock violation or access denied on the source: the only reasons to split an item up.
+    private static bool Busy(Exception e)
+    {
+        static bool Code(int c) => c is 5 or 32 or 33;
+        if (e is UnauthorizedAccessException) return true;
+        if (((uint)e.HResult & 0xFFFF0000) == 0x80070000 && Code(e.HResult & 0xFFFF)) return true;
+        return e.InnerException is System.ComponentModel.Win32Exception w && Code(w.NativeErrorCode);
     }
 
-    // Files and reparse points below dir; a reparse point is a leaf and is never entered.
-    private static List<string> Leaves(string dir)
+    /// <summary>
+    /// Removes one unit (move to quarantine, or permanent delete) as a whole. Only if that fails for a busy reason
+    /// and the unit is a real directory does it descend, trying each child as its own unit, so a locked file only
+    /// splits its own branch. A vanished unit is already gone; any other failure skips the unit.
+    /// </summary>
+    private void Unit(Ctx c, string path, long size, bool checkRails, CancellationToken ct)
     {
-        var list = new List<string>();
-        foreach (var e in Directory.EnumerateFileSystemEntries(dir))
-        {
-            var a = File.GetAttributes(e);
-            if ((a & FileAttributes.Directory) != 0 && (a & FileAttributes.ReparsePoint) == 0) list.AddRange(Leaves(e));
-            else list.Add(e);
-        }
-        return list;
-    }
+        ct.ThrowIfCancellationRequested();
+        if (checkRails && !SafetyRails.CanRemove(path, c.Rule, user, windowsDir, out var why)) { c.Reason ??= why; c.Skipped += size; return; }
+        FileAttributes a;
+        try { a = File.GetAttributes(path); }
+        catch (Exception e) when (Gone(e)) { return; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { c.Skipped += Math.Max(size, 1); c.Error ??= e.Message; return; }
+        var splittable = (a & FileAttributes.Directory) != 0 && (a & FileAttributes.ReparsePoint) == 0;
+        // a recursive delete that fails midway may already have removed part of the tree
+        var sizeBefore = splittable && c.Store is null ? Measure(path) : 0;
 
-    // Removes directories left empty; a directory still holding anything (skipped files) is kept.
-    private static void PruneEmpty(string dir)
-    {
-        foreach (var e in Directory.EnumerateDirectories(dir))
-            if ((File.GetAttributes(e) & FileAttributes.ReparsePoint) == 0) PruneEmpty(e);
-        try { Directory.Delete(dir, false); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
-    }
-
-    /// <summary>Permanent delete; returns the bytes that could not be deleted. A link is deleted as a link, never entered.</summary>
-    private static long DeleteTree(string path)
-    {
         try
         {
-            var a = File.GetAttributes(path);
-            if ((a & FileAttributes.ReadOnly) != 0) File.SetAttributes(path, a & ~FileAttributes.ReadOnly);
-            if ((a & FileAttributes.Directory) == 0) { File.Delete(path); return 0; }
-            long skipped = 0;
-            if ((a & FileAttributes.ReparsePoint) == 0)
-                foreach (var c in Directory.EnumerateFileSystemEntries(path).ToList()) skipped += DeleteTree(c);
-            if (skipped == 0) Directory.Delete(path, false);
-            return skipped;
+            if (c.Store is { } store) { store.Add(path, size, c.Rule.Id); c.Quarantined += size; }
+            else DeleteWhole(path, a);
+            c.Any = true;
+            return;
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return Math.Max(Measure(path), 1); }
+        catch (Exception e) when (Gone(e)) { return; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            if (!Busy(e)) { c.Skipped += Math.Max(size, 1); c.Error ??= e.Message; return; }
+            if (!splittable) { c.Skipped += Math.Max(size, 1); return; }
+            if (c.Store is null && Measure(path) < sizeBefore) c.Any = true;
+        }
+
+        List<string> kids;
+        try { kids = Directory.EnumerateFileSystemEntries(path).ToList(); }
+        catch (Exception e) when (Gone(e)) { return; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { c.Skipped += Math.Max(size, 1); c.Error ??= e.Message; return; }
+        foreach (var k in kids) Unit(c, k, Measure(k), true, ct);
+        // empty directories are cleaned up; one that still holds skipped files stays
+        try { Directory.Delete(path, false); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+    }
+
+    // A link is deleted as a link, never entered.
+    private static void DeleteWhole(string path, FileAttributes a)
+    {
+        if ((a & FileAttributes.Directory) == 0)
+        {
+            if ((a & FileAttributes.ReadOnly) != 0) File.SetAttributes(path, a & ~FileAttributes.ReadOnly);
+            File.Delete(path);
+        }
+        else Directory.Delete(path, (a & FileAttributes.ReparsePoint) == 0);
     }
 
     // Logical bytes; reparse points are not followed.

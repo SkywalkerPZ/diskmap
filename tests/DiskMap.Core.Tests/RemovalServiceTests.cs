@@ -251,4 +251,76 @@ public class RemovalServiceTests
         foreach (var id in new[] { "old-installers", "windows-update", "hibernation", "recycle-bin" })
             Assert.False(RemovalService.IsBulkEligible(R(id)), id);
     }
+
+    [Fact]
+    public void QueryInfo_HasNativeSizeOnX64()
+    {
+        if (Environment.Is64BitProcess) Assert.Equal(24, System.Runtime.InteropServices.Marshal.SizeOf<ShellRecycleBin.QueryInfo>());
+    }
+
+    [Fact]
+    public async Task Anchor_ChildVanishesBeforeRemoval_IsCountedAsGone()
+    {
+        using var e = new Env();
+        var temp = e.Fx.User.Temp;
+        e.Fx.File(TempRel("x.tmp"), 10);
+        e.Fx.File(TempRel("d", "y.tmp"), 20);
+        var z = e.Fx.File(TempRel("z.tmp"), 99);
+        var store = e.Store;
+        // storeFor runs after the children were enumerated, so z.tmp vanishes in between
+        var svc = new RemovalService(new AppSettings(3), e.Fx.User, e.Win, false, e.Runner, e.Bin, _ => 1000, _ => { File.Delete(z); return store; });
+
+        var r = await svc.RemoveAsync(M("temp", Node(temp, 30, true, Child("x.tmp", 10, false), Child("d", 20, true))), default);
+
+        Assert.True(r.Success, r.Error);
+        Assert.Equal(30, r.BytesQuarantined);
+        Assert.Equal(0, r.BytesSkipped);
+        Assert.Equal(2, e.Store.Entries.Count);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(temp));
+    }
+
+    [Fact]
+    public async Task LockedStore_FailsWithoutPerFileAttempts()
+    {
+        using var e = new Env();
+        var dir = Path.GetDirectoryName(e.Fx.File(TempRel("junk", "a.bin"), 10))!;
+        e.Fx.File(TempRel("junk", "b.bin"), 10);
+        var q = Directory.CreateDirectory(Path.Combine(e.Fx.Root, "DiskMap Quarantine")).FullName;
+        using var hold = new FileStream(Path.Combine(q, ".lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        var sw = Stopwatch.StartNew();
+
+        var r = await e.Svc(3).RemoveAsync(M("temp", Node(dir, 20, true)), default);
+
+        Assert.False(r.Success);
+        Assert.Contains("locked", r.Error);
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(6)); // one 2 s lock wait, not one per file
+        Assert.True(File.Exists(Path.Combine(dir, "a.bin")) && File.Exists(Path.Combine(dir, "b.bin")));
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(0)]
+    public async Task LockedFileDeepInside_OnlySplitsItsOwnBranch(int undoDays)
+    {
+        using var e = new Env();
+        var nm = Path.Combine(e.Fx.Root, "Users", "tester", "proj", "node_modules");
+        string? locked = null;
+        for (var d = 0; d < 5; d++)
+            for (var i = 0; i < 10; i++)
+            {
+                var f = e.Fx.File(Path.Combine("Users", "tester", "proj", "node_modules", "sub" + d, "f" + i + ".js"), 10);
+                if (d == 2 && i == 3) locked = f;
+            }
+        e.Fx.File(Path.Combine("Users", "tester", "proj", "package.json"), 2);
+
+        RemovalResult r;
+        using (new FileStream(locked!, FileMode.Open, FileAccess.Read, FileShare.None))
+            r = await e.Svc(undoDays).RemoveAsync(M("dev-caches", Node(nm, 500, true)), default);
+
+        Assert.True(r.Success, r.Error);
+        Assert.True(r.BytesSkipped > 0);
+        Assert.Equal(new[] { locked }, Directory.EnumerateFiles(nm, "*", SearchOption.AllDirectories).ToArray());
+        if (undoDays > 0) Assert.InRange(e.Store.Entries.Count, 1, 15); // 4 whole branches + 9 files, not 49
+        else Assert.Empty(e.Store.Entries);
+    }
 }

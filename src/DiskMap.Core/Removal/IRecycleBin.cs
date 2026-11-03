@@ -13,8 +13,9 @@ public sealed class ShellRecycleBin : IRecycleBin
 {
     private const uint NoConfirmation = 1, NoProgressUi = 2, NoSound = 4;
 
-    [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    private struct QueryInfo { public uint Size; public long Bytes; public long Items; }
+    // natural alignment: shellapi.h only packs this struct on 32-bit (24 bytes on x64)
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct QueryInfo { public uint Size; public long Bytes; public long Items; }
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern int SHQueryRecycleBinW(string? root, ref QueryInfo info);
