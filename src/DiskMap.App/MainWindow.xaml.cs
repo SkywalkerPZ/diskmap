@@ -31,7 +31,7 @@ public sealed partial class MainWindow : Window
     // If UAC is declined RelaunchElevated returns false and this instance simply keeps running.
     private void OnRelaunchClick(object sender, RoutedEventArgs e)
     {
-        try { Elevation.RelaunchElevated(App.Session.User, null); }
+        try { Elevation.RelaunchElevated(App.Session.User, App.Session.Drive); }
         catch (Win32Exception) { } // launch failed for a reason other than UAC cancel; stay open
     }
 }

@@ -10,7 +10,43 @@
   <data name="ElevationBar.Message" xml:space="preserve"><value>Restart as administrator for the fast scan and system items</value></data>
   <data name="RulesBar.Message" xml:space="preserve"><value>The cleanup rules could not be loaded, so no cleanup items will be found. Reinstall DiskMap to fix this.</value></data>
   <data name="ElevationButton.Content" xml:space="preserve"><value>Restart as administrator</value></data>
-  <data name="ExplorePlaceholder.Text" xml:space="preserve"><value>Explore</value></data>
+  <data name="StatusScanning" xml:space="preserve"><value>Scanning… {0:N0} files</value></data>
+  <data name="StatusDone" xml:space="preserve"><value>{0:N0} files in {1:0.0} s</value></data>
+  <data name="StatusDoneFast" xml:space="preserve"><value>{0:N0} files in {1:0.0} s (fast scan)</value></data>
+  <data name="ScanFailed" xml:space="preserve"><value>Couldn't scan {0}: {1}</value></data>
+  <data name="LocalDisk" xml:space="preserve"><value>Local Disk</value></data>
+  <data name="DriveBox.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve"><value>Drive</value></data>
+  <data name="MapName" xml:space="preserve"><value>Disk map</value></data>
+  <data name="SelectHint.Text" xml:space="preserve"><value>Select a box on the map to see what it is. Double-click a folder to zoom in and see the folder itself.</value></data>
+  <data name="SizeOnDisk" xml:space="preserve"><value>Size on disk: {0}</value></data>
+  <data name="SizeAfterCleanup" xml:space="preserve"><value>Size known after cleanup</value></data>
+  <data name="Modified" xml:space="preserve"><value>Modified: {0}</value></data>
+  <data name="LabelSafe" xml:space="preserve"><value>Safe</value></data>
+  <data name="LabelSafeIfNoHibernate" xml:space="preserve"><value>Safe if you don't use hibernate</value></data>
+  <data name="LabelRebuildable" xml:space="preserve"><value>Rebuildable</value></data>
+  <data name="LabelCheckFirst" xml:space="preserve"><value>Check first</value></data>
+  <data name="LabelAlreadyDeleted" xml:space="preserve"><value>Already deleted</value></data>
+  <data name="IfRemoved.Text" xml:space="preserve"><value>If you remove it</value></data>
+  <data name="EstimateButton.Content" xml:space="preserve"><value>Estimate</value></data>
+  <data name="EstimateRunning.Text" xml:space="preserve"><value>Estimating. This can take a few minutes.</value></data>
+  <data name="EstimateResult" xml:space="preserve"><value>about {0} (estimate)</value></data>
+  <data name="EstimateNote.Text" xml:space="preserve"><value>Windows shares many of these files, so the exact amount is only known afterwards.</value></data>
+  <data name="EstimateFailed" xml:space="preserve"><value>Couldn't estimate</value></data>
+  <data name="RemoveButton.Content" xml:space="preserve"><value>Remove</value></data>
+  <data name="NeedsAdminTip.Content" xml:space="preserve"><value>Needs administrator</value></data>
+  <data name="NeedsAdminText.Text" xml:space="preserve"><value>Needs administrator</value></data>
+  <data name="OpenInExplorerButton.Content" xml:space="preserve"><value>Open in Explorer</value></data>
+  <data name="ConfirmTitle" xml:space="preserve"><value>Remove {0}?</value></data>
+  <data name="ConfirmRemove" xml:space="preserve"><value>Remove</value></data>
+  <data name="ConfirmCancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="ConfirmUndo" xml:space="preserve"><value>You can restore it from Quarantine for {0} days.</value></data>
+  <data name="CantUndo" xml:space="preserve"><value>This can't be undone</value></data>
+  <data name="Removing" xml:space="preserve"><value>Removing…</value></data>
+  <data name="RemovingDism" xml:space="preserve"><value>Cleaning up Windows update files. This can take 10 minutes or more. You can keep using DiskMap.</value></data>
+  <data name="UpdatingMap" xml:space="preserve"><value>Updating the map…</value></data>
+  <data name="ResultFreed" xml:space="preserve"><value>Freed {0}</value></data>
+  <data name="ResultQuarantined" xml:space="preserve"><value>{0} moved to quarantine</value></data>
+  <data name="ResultSkipped" xml:space="preserve"><value>, skipped {0} in use</value></data>
   <data name="CleanUpPlaceholder.Text" xml:space="preserve"><value>Clean up</value></data>
   <data name="QuarantinePlaceholder.Text" xml:space="preserve"><value>Quarantine</value></data>
   <data name="SettingsPlaceholder.Text" xml:space="preserve"><value>Settings</value></data>

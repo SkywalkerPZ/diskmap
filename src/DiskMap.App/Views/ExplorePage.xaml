@@ -1,6 +1,101 @@
 <Page
     x:Class="DiskMap.App.Views.ExplorePage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <TextBlock x:Uid="ExplorePlaceholder" Margin="24" />
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:DiskMap.App.Views"
+    xmlns:controls="using:DiskMap.App.Controls"
+    NavigationCacheMode="Required">
+    <Grid Padding="16,8,16,16" RowSpacing="8" RowDefinitions="Auto,Auto,Auto,*">
+        <StackPanel Orientation="Horizontal" Spacing="12">
+            <ComboBox x:Uid="DriveBox" MinWidth="200" ItemsSource="{x:Bind ViewModel.Drives}"
+                      SelectedIndex="{x:Bind ViewModel.DriveIndex, Mode=TwoWay}"
+                      IsEnabled="{x:Bind ViewModel.CanChangeDrive, Mode=OneWay}" />
+            <ProgressRing Width="16" Height="16" IsActive="{x:Bind ViewModel.IsScanning, Mode=OneWay}"
+                          Visibility="{x:Bind ViewModel.IsScanning, Mode=OneWay}" />
+            <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.Status, Mode=OneWay}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        </StackPanel>
+
+        <InfoBar Grid.Row="1" IsOpen="{x:Bind ViewModel.IsResultOpen, Mode=TwoWay}"
+                 Message="{x:Bind ViewModel.ResultMessage, Mode=OneWay}"
+                 Severity="{x:Bind ViewModel.ResultSeverity, Mode=OneWay}" />
+
+        <BreadcrumbBar Grid.Row="2" ItemsSource="{x:Bind ViewModel.Crumbs}" ItemClicked="OnCrumbClicked" />
+
+        <Grid Grid.Row="3" ColumnSpacing="12" ColumnDefinitions="*,320">
+            <Border CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                <controls:TreemapControl x:Name="Map" Root="{x:Bind ViewModel.ZoomRoot, Mode=OneWay}"
+                                         Selected="{x:Bind ViewModel.Selected, Mode=OneWay}" />
+            </Border>
+
+            <Border Grid.Column="1" CornerRadius="8" BorderThickness="1" Padding="16"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                <ScrollViewer>
+                    <StackPanel Spacing="8">
+                        <TextBlock x:Uid="SelectHint" TextWrapping="Wrap" Visibility="{x:Bind ViewModel.NoSelection, Mode=OneWay}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                        <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.HasSelection, Mode=OneWay}">
+                            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap"
+                                       Text="{x:Bind ViewModel.SelectedName, Mode=OneWay}" />
+                            <TextBlock Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Text="{x:Bind ViewModel.SelectedPath, Mode=OneWay}" />
+                            <TextBlock Text="{x:Bind ViewModel.SelectedSize, Mode=OneWay}" />
+                            <TextBlock Text="{x:Bind ViewModel.SelectedModified, Mode=OneWay}" />
+
+                            <StackPanel Spacing="8" Margin="0,8,0,0" Visibility="{x:Bind ViewModel.HasMatch, Mode=OneWay}">
+                                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap"
+                                           Text="{x:Bind ViewModel.MatchTitle, Mode=OneWay}" />
+                                <Border HorizontalAlignment="Left" CornerRadius="4" Padding="8,2"
+                                        Background="{x:Bind local:ExplorePage.BadgeBrush(ViewModel.Label), Mode=OneWay}">
+                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="{x:Bind ViewModel.LabelText, Mode=OneWay}" />
+                                </Border>
+                                <TextBlock TextWrapping="Wrap" Text="{x:Bind ViewModel.Explanation, Mode=OneWay}" />
+                                <TextBlock x:Uid="IfRemoved" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock TextWrapping="Wrap" Text="{x:Bind ViewModel.Consequence, Mode=OneWay}" />
+
+                                <StackPanel Spacing="6" Visibility="{x:Bind ViewModel.IsComponentStore, Mode=OneWay}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button x:Uid="EstimateButton" Click="OnEstimateClick" IsEnabled="{x:Bind ViewModel.CanEstimate, Mode=OneWay}" />
+                                        <ProgressRing Width="16" Height="16" IsActive="{x:Bind ViewModel.IsEstimating, Mode=OneWay}"
+                                                      Visibility="{x:Bind ViewModel.IsEstimating, Mode=OneWay}" />
+                                        <TextBlock x:Uid="EstimateRunning" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="200"
+                                                   Visibility="{x:Bind ViewModel.IsEstimating, Mode=OneWay}" />
+                                    </StackPanel>
+                                    <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.HasEstimate, Mode=OneWay}">
+                                        <TextBlock TextWrapping="Wrap" Text="{x:Bind ViewModel.EstimateText, Mode=OneWay}" />
+                                        <TextBlock x:Uid="EstimateNote" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- A disabled button shows no tooltip of its own, so the wrapper carries it. -->
+                                <Grid HorizontalAlignment="Left" Background="Transparent">
+                                    <ToolTipService.ToolTip>
+                                        <ToolTip x:Uid="NeedsAdminTip" IsEnabled="{x:Bind ViewModel.NeedsAdmin, Mode=OneWay}" />
+                                    </ToolTipService.ToolTip>
+                                    <Button x:Uid="RemoveButton" Style="{StaticResource AccentButtonStyle}" Click="OnRemoveClick"
+                                            IsEnabled="{x:Bind ViewModel.CanRemove, Mode=OneWay}" />
+                                </Grid>
+                                <TextBlock x:Uid="NeedsAdminText" Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           Visibility="{x:Bind ViewModel.NeedsAdmin, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <Button x:Uid="OpenInExplorerButton" Margin="0,8,0,0" Click="OnOpenClick" />
+                        </StackPanel>
+
+                        <!-- Outside the selection: a removal clears the selection while the map is still updating. -->
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}">
+                            <ProgressRing Width="16" Height="16" IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
+                            <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="240"
+                                       Text="{x:Bind ViewModel.BusyText, Mode=OneWay}" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </Grid>
 </Page>

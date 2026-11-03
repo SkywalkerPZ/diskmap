@@ -36,7 +36,9 @@ public sealed partial class ScanSession : ObservableObject
     [ObservableProperty] public partial bool IsScanning { get; private set; }
     [ObservableProperty] public partial long FilesSeen { get; private set; }
     [ObservableProperty] public partial TimeSpan Elapsed { get; private set; }
-    /// <summary>e.g. "1.2M files in 3.4 s", updated while scanning and after.</summary>
+    /// <summary>The drive of the latest scan, e.g. C: root; null before the first scan.</summary>
+    [ObservableProperty] public partial string? Drive { get; private set; }
+    /// <summary>"Scanning… 412,000 files" while scanning, then "1,204,331 files in 3.4 s (fast scan)".</summary>
     [ObservableProperty] public partial string Status { get; private set; } = "";
 
     /// <summary>One QuarantineStore per volume, shared by every removal.</summary>
@@ -47,13 +49,14 @@ public sealed partial class ScanSession : ObservableObject
     {
         if (IsScanning) return; // a second concurrent scan is refused; the flag is set before any await
         IsScanning = true;
+        Drive = drive;
         FilesSeen = 0;
         var sw = Stopwatch.StartNew();
         var done = false; // Progress<T> posts asynchronously; stale callbacks must not overwrite the final values
         var progress = new Progress<long>(n =>
         {
             if (done) return;
-            FilesSeen = n; Elapsed = sw.Elapsed; Status = Describe(n, sw.Elapsed);
+            FilesSeen = n; Elapsed = sw.Elapsed; Status = Str.Format("StatusScanning", n);
         });
         try
         {
@@ -66,14 +69,33 @@ public sealed partial class ScanSession : ObservableObject
             Matches = matches;
             FilesSeen = result.FileCount;
             Elapsed = result.Elapsed;
-            Status = Describe(result.FileCount, result.Elapsed);
+            Status = Str.Format(result.UsedFastScan ? "StatusDoneFast" : "StatusDone", result.FileCount, result.Elapsed.TotalSeconds);
         }
         finally { done = true; IsScanning = false; }
     }
 
-    private static string Describe(long files, TimeSpan t)
+    /// <summary>
+    /// Rescans one folder of the current tree in place (or drops it if it has gone), fixes the sizes above it and
+    /// re-runs the rules. Does nothing while another scan runs or if the folder is not in the current tree.
+    /// </summary>
+    public async Task RescanFolderAsync(FileNode folder, CancellationToken ct = default)
     {
-        var n = files >= 1_000_000 ? $"{files / 1e6:0.#}M" : files >= 1_000 ? $"{files / 1e3:0.#}K" : files.ToString();
-        return $"{n} files in {t.TotalSeconds:0.#} s";
+        if (IsScanning || Current is not { } cur || FileTree.RootOf(folder) != cur.Root) return;
+        IsScanning = true;
+        try
+        {
+            var path = folder.FullPath;
+            if (Directory.Exists(path))
+            {
+                ScanResult fresh;
+                try { fresh = await ScannerFactory.For(path, IsElevated).ScanAsync(path, null, ct); }
+                catch (NotSupportedException) { fresh = await new FolderWalkScanner().ScanAsync(path, null, ct); }
+                FileTree.ReplaceContents(folder, fresh.Root); // back on the UI thread, so the map never draws a half-edited tree
+            }
+            else FileTree.Remove(folder);
+            Matches = await Task.Run(() => RuleMatcher.MatchAll(cur.Root, Rules, User, _windowsDir, DateTime.UtcNow), ct);
+            Current = cur with { FileCount = cur.Root.FileCount };
+        }
+        finally { IsScanning = false; }
     }
 }
