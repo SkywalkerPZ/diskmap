@@ -50,6 +50,13 @@ public sealed partial class MftScannerTests
         await Assert.ThrowsAsync<NotSupportedException>(() => new MftScanner().ScanAsync(f.Root, null, CancellationToken.None));
     }
 
+    [Fact]
+    public void ByHandleFileInformation_MatchesNativeLayout()
+    {
+        Assert.Equal(52, Marshal.SizeOf<NativeMethods.ByHandleFileInformation>());
+        Assert.Equal(28, (int)Marshal.OffsetOf<NativeMethods.ByHandleFileInformation>(nameof(NativeMethods.ByHandleFileInformation.VolumeSerialNumber)));
+    }
+
     // ---- Pure parser tests: FILE records built by hand following the NTFS on-disk layout. ----
 
     private const int RecSize = 1024;

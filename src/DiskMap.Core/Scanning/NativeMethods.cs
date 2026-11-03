@@ -12,7 +12,7 @@ internal static partial class NativeMethods
     public const uint FileShareReadWrite = 3;
     public const uint FsctlGetNtfsVolumeData = 0x00090064;
 
-    [StructLayout(LayoutKind.Sequential)]
+    [StructLayout(LayoutKind.Sequential, Pack = 4)] // FILETIMEs are two DWORDs: no padding after FileAttributes
     public struct ByHandleFileInformation
     {
         public uint FileAttributes;
