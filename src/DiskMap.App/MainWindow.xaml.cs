@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using DiskMap.App.Views;
 using DiskMap.Core;
 using Microsoft.UI.Xaml;
@@ -11,6 +12,7 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         ElevationBar.IsOpen = !App.Session.IsElevated;
+        RulesBar.IsOpen = App.RulesFailed;
         Nav.SelectedItem = ExploreItem;
     }
 
@@ -27,5 +29,9 @@ public sealed partial class MainWindow : Window
     }
 
     // If UAC is declined RelaunchElevated returns false and this instance simply keeps running.
-    private void OnRelaunchClick(object sender, RoutedEventArgs e) => Elevation.RelaunchElevated(App.Session.User, null);
+    private void OnRelaunchClick(object sender, RoutedEventArgs e)
+    {
+        try { Elevation.RelaunchElevated(App.Session.User, null); }
+        catch (Win32Exception) { } // launch failed for a reason other than UAC cancel; stay open
+    }
 }

@@ -14,6 +14,8 @@ public partial class App : Application
     public static ScanSession Session { get; private set; } = null!;
     /// <summary>Drive passed via --drive by an elevated relaunch; null when started normally.</summary>
     public static string? StartupDrive { get; private set; }
+    /// <summary>True when the rule files could not be loaded; the app runs with no rules.</summary>
+    public static bool RulesFailed { get; private set; }
 
     public App() => InitializeComponent();
 
@@ -29,7 +31,9 @@ public partial class App : Application
         if (settings.AlwaysStartElevated && !elevated) Elevation.RelaunchElevated(user, StartupDrive); // false = declined, carry on
 
         PurgeQuarantines(settings.UndoDays);
-        var rules = RuleLoader.LoadAll(Path.Combine(AppContext.BaseDirectory, "Rules", "data"));
+        IReadOnlyList<Rule> rules = [];
+        try { rules = RuleLoader.LoadAll(Path.Combine(AppContext.BaseDirectory, "Rules", "data")); }
+        catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException) { RulesFailed = true; }
         Session = new ScanSession(user, elevated, settings, rules);
 
         _window = new MainWindow();

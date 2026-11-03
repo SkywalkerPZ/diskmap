@@ -8,6 +8,7 @@
   <data name="NavCleanUp.Content" xml:space="preserve"><value>Clean up</value></data>
   <data name="NavQuarantine.Content" xml:space="preserve"><value>Quarantine</value></data>
   <data name="ElevationBar.Message" xml:space="preserve"><value>Restart as administrator for the fast scan and system items</value></data>
+  <data name="RulesBar.Message" xml:space="preserve"><value>The cleanup rules could not be loaded, so no cleanup items will be found. Reinstall DiskMap to fix this.</value></data>
   <data name="ElevationButton.Content" xml:space="preserve"><value>Restart as administrator</value></data>
   <data name="ExplorePlaceholder.Text" xml:space="preserve"><value>Explore</value></data>
   <data name="CleanUpPlaceholder.Text" xml:space="preserve"><value>Clean up</value></data>

@@ -45,22 +45,30 @@ public sealed partial class ScanSession : ObservableObject
 
     public async Task ScanAsync(string drive, CancellationToken ct = default)
     {
+        if (IsScanning) return; // a second concurrent scan is refused; the flag is set before any await
         IsScanning = true;
         FilesSeen = 0;
         var sw = Stopwatch.StartNew();
-        var progress = new Progress<long>(n => { FilesSeen = n; Elapsed = sw.Elapsed; Status = Describe(n, sw.Elapsed); });
+        var done = false; // Progress<T> posts asynchronously; stale callbacks must not overwrite the final values
+        var progress = new Progress<long>(n =>
+        {
+            if (done) return;
+            FilesSeen = n; Elapsed = sw.Elapsed; Status = Describe(n, sw.Elapsed);
+        });
         try
         {
             ScanResult result;
             try { result = await ScannerFactory.For(drive, IsElevated).ScanAsync(drive, progress, ct); }
             catch (NotSupportedException) { result = await new FolderWalkScanner().ScanAsync(drive, progress, ct); }
+            var matches = await Task.Run(() => RuleMatcher.MatchAll(result.Root, Rules, User, _windowsDir, DateTime.UtcNow), ct);
+            done = true;
             Current = result;
-            Matches = RuleMatcher.MatchAll(result.Root, Rules, User, _windowsDir, DateTime.UtcNow);
+            Matches = matches;
             FilesSeen = result.FileCount;
             Elapsed = result.Elapsed;
             Status = Describe(result.FileCount, result.Elapsed);
         }
-        finally { IsScanning = false; }
+        finally { done = true; IsScanning = false; }
     }
 
     private static string Describe(long files, TimeSpan t)
