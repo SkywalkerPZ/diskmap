@@ -8,6 +8,13 @@ public class RuleLoaderTests
     private static Rule Get(string id) => RuleLoader.LoadAll(DataDir).Single(r => r.Id == id);
 
     [Fact]
+    public void IsPerUser_IsEverythingExceptTheSystemRules()
+    {
+        var system = RuleLoader.LoadAll(DataDir).Where(r => !r.IsPerUser).Select(r => r.Id).Order();
+        Assert.Equal(["crash-dumps-system", "hibernation", "windows-temp", "windows-update"], system);
+    }
+
+    [Fact]
     public void LoadAll_LoadsTheShippedRules()
     {
         var rules = RuleLoader.LoadAll(DataDir);

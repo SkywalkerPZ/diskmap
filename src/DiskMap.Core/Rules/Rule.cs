@@ -25,4 +25,10 @@ public sealed record Rule
     public int? MinAgeDays { get; init; }
 
     public bool Undoable => Method == RemovalMethod.Quarantine;
+
+    /// <summary>Resolves inside the launching user's own folders (or their Recycle Bin), which that user can write to.</summary>
+    public bool IsPerUser => Method == RemovalMethod.EmptyRecycleBin || FolderNames.Count > 0
+        || Paths.Any(p => UserTokens.Any(t => p.Contains(t, StringComparison.OrdinalIgnoreCase)));
+
+    private static readonly string[] UserTokens = ["{UserProfile}", "{LocalAppData}", "{AppData}", "{Temp}", "{Downloads}", "{Sid}"];
 }

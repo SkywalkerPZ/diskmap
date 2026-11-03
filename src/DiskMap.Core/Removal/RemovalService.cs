@@ -23,6 +23,8 @@ public sealed class RemovalService(AppSettings settings, UserContext user, strin
     {
         var rule = match.Rule;
         if (rule.NeedsAdmin && !isElevated) return Fail("Needs administrator");
+        // An administrator's token acting in a standard user's folders: that user could swap a parent folder for a junction mid-removal.
+        if (rule.IsPerUser && !IsLaunchingAccount(user)) return Fail("This item belongs to the account that started DiskMap.");
         try
         {
             return rule.Method switch
@@ -44,10 +46,10 @@ public sealed class RemovalService(AppSettings settings, UserContext user, strin
     public static string SystemTool(string exe) => Path.Combine(Environment.SystemDirectory, exe);
 
     /// <summary>
-    /// The shell's Recycle Bin calls act on this process's account. When an administrator elevated DiskMap for another
-    /// account, that would be the administrator's bin, not the launching user's, so it is not offered.
+    /// False when an administrator elevated DiskMap for another account. Then per-user rules are not offered: the shell's
+    /// Recycle Bin calls would hit the administrator's bin, and the launching user could redirect removals in their own folders.
     /// </summary>
-    public static bool BinIsLaunchingUsers(UserContext user) =>
+    public static bool IsLaunchingAccount(UserContext user) =>
         string.Equals(WindowsIdentity.GetCurrent().User?.Value, user.Sid, StringComparison.OrdinalIgnoreCase);
 
     private async Task<RemovalResult> RunTool(string exe, string args, CancellationToken ct)
@@ -72,7 +74,7 @@ public sealed class RemovalService(AppSettings settings, UserContext user, strin
     // Freed = what the bin held before minus what it holds after (all drives, like the size that was shown).
     private RemovalResult EmptyBin()
     {
-        if (!BinIsLaunchingUsers(user)) return Fail("This Recycle Bin belongs to another account.");
+        if (!IsLaunchingAccount(user)) return Fail("This Recycle Bin belongs to another account.");
         var before = bin.SizeBytes();
         bin.Empty();
         return new(true, Math.Max(0, before - bin.SizeBytes()), 0, 0, null);

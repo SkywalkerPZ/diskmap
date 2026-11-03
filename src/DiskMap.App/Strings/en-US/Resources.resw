@@ -35,7 +35,7 @@
   <data name="RemoveButton.Content" xml:space="preserve"><value>Remove</value></data>
   <data name="NeedsAdministrator" xml:space="preserve"><value>Needs administrator</value></data>
   <data name="DeletedPermanently" xml:space="preserve"><value>Undo is off, so the files will be deleted permanently.</value></data>
-  <data name="RecycleBinOtherAccount" xml:space="preserve"><value>DiskMap is running as a different account, so it can only reach that account's Recycle Bin. Start DiskMap without administrator rights to empty yours.</value></data>
+  <data name="OtherAccount" xml:space="preserve"><value>DiskMap is running as a different account than the one that started it, so it won't touch your own folders or Recycle Bin. Start DiskMap from your account, or elevate with your own administrator account, to remove this.</value></data>
   <data name="OpenInExplorerButton.Content" xml:space="preserve"><value>Open in Explorer</value></data>
   <data name="ConfirmTitle" xml:space="preserve"><value>Remove {0}?</value></data>
   <data name="ConfirmRemove" xml:space="preserve"><value>Remove</value></data>

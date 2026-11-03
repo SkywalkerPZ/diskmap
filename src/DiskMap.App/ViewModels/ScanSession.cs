@@ -56,7 +56,7 @@ public sealed partial class ScanSession : ObservableObject
     /// <summary>Why a rule's items can't be removed in this session (shown greyed out with this text), or null.</summary>
     public string? UnavailableReason(Rule rule) =>
         rule.NeedsAdmin && !IsElevated ? Str.Get("NeedsAdministrator")
-        : rule.Method == RemovalMethod.EmptyRecycleBin && !RemovalService.BinIsLaunchingUsers(User) ? Str.Get("RecycleBinOtherAccount")
+        : rule.IsPerUser && !RemovalService.IsLaunchingAccount(User) ? Str.Get("OtherAccount")
         : null;
 
     public UserContext User { get; }

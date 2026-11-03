@@ -359,6 +359,19 @@ public class RemovalServiceTests
         Assert.Equal(0, e.Bin.Emptied);
     }
 
+    [Fact]
+    public async Task PerUserItem_WhenRunningAsAnotherAccount_IsNeverTouched()
+    {
+        using var e = new Env();
+        var f = e.Fx.File(TempRel("junk", "a.bin"), 100);
+        var dir = Path.GetDirectoryName(f)!;
+        var other = e.Fx.User with { Sid = "S-1-5-21-1-2-3-1001" }; // the launching user's folders, but an administrator's token
+        var svc = new RemovalService(new AppSettings(0), other, e.Win, true, e.Runner, e.Bin, _ => 0, _ => e.Store);
+        var r = await svc.RemoveAsync(M("temp", Node(dir, 100, true)), default);
+        Assert.False(r.Success);
+        Assert.True(File.Exists(f));
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
