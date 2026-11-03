@@ -1,8 +1,10 @@
 using DiskMap.Core.Scanning;
 using DiskMap.Core.Treemap;
+using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Text;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -27,10 +29,18 @@ public sealed partial class TreemapControl : UserControl
     ];
 
     private readonly CanvasControl _canvas = new();
+    private readonly DispatcherQueueTimer _resizeSettle;
+    private readonly CanvasTextFormat _font = new()
+    {
+        FontSize = 12, WordWrapping = CanvasWordWrapping.NoWrap,
+        TrimmingGranularity = CanvasTextTrimmingGranularity.Character, TrimmingSign = CanvasTrimmingSign.Ellipsis,
+    };
     private IReadOnlyList<TreemapRect> _rects = [];
     private FileNode? _laidOutRoot;
     private Size _laidOutSize;
     private bool _dirty;
+    // The whole map drawn once; repaints (window moves, selection changes) only copy it.
+    private CanvasRenderTarget? _cache;
 
     public TreemapControl()
     {
@@ -38,9 +48,15 @@ public sealed partial class TreemapControl : UserControl
         IsTabStop = false;
         AutomationProperties.SetName(this, Str.Get("MapName"));
         _canvas.Draw += OnDraw;
+        _canvas.CreateResources += (_, _) => Refresh(); // a lost device takes the cached bitmap with it
         _canvas.Tapped += OnTapped;
         _canvas.DoubleTapped += OnDoubleTapped;
-        ActualThemeChanged += (_, _) => _canvas.Invalidate();
+        ActualThemeChanged += (_, _) => Refresh();
+        // While a resize drag runs, the cached map is stretched; the real layout runs once the size stops changing.
+        _resizeSettle = DispatcherQueue.GetForCurrentThread().CreateTimer();
+        _resizeSettle.Interval = TimeSpan.FromMilliseconds(150);
+        _resizeSettle.IsRepeating = false;
+        _resizeSettle.Tick += (_, _) => Refresh();
         // The page is cached for the app's lifetime, so the canvas is never torn down (no RemoveFromVisualTree).
     }
 
@@ -68,26 +84,45 @@ public sealed partial class TreemapControl : UserControl
     private void OnDraw(CanvasControl sender, CanvasDrawEventArgs args)
     {
         var size = sender.Size;
-        if (_dirty || Root != _laidOutRoot || size != _laidOutSize)
+        if (size.Width < 1 || size.Height < 1) return;
+        var resizing = _cache is not null && !_dirty && Root == _laidOutRoot && size != _laidOutSize;
+        if (resizing)
+        {
+            _resizeSettle.Stop();
+            _resizeSettle.Start();
+        }
+        else if (_cache is null || _dirty || Root != _laidOutRoot)
         {
             _rects = Root is not FileNode root ? [] : TreemapLayout.Layout(root, new RectD(0, 0, size.Width, size.Height), MaxDepth, MinArea);
             _laidOutRoot = Root as FileNode;
             _laidOutSize = size;
             _dirty = false;
+            _cache?.Dispose();
+            _cache = new CanvasRenderTarget(sender, (float)size.Width, (float)size.Height);
+            using (var cds = _cache.CreateDrawingSession()) DrawMap(cds);
         }
 
         var ds = args.DrawingSession;
+        ds.DrawImage(_cache!, new Rect(0, 0, size.Width, size.Height));
+        if (Selected is null) return;
+        double sx = size.Width / _laidOutSize.Width, sy = size.Height / _laidOutSize.Height;
+        foreach (var r in _rects)
+        {
+            if (r.Node is null || !ReferenceEquals(r.Node, Selected)) continue;
+            var outline = ActualTheme == ElementTheme.Dark ? Colors.White : Colors.Black;
+            ds.DrawRectangle(new Rect(r.Bounds.X * sx + 1, r.Bounds.Y * sy + 1, Math.Max(0, r.Bounds.W * sx - 2), Math.Max(0, r.Bounds.H * sy - 2)), outline, 2.5f);
+            break;
+        }
+    }
+
+    private void DrawMap(CanvasDrawingSession ds)
+    {
         var dark = ActualTheme == ElementTheme.Dark;
         var grey = dark ? Color.FromArgb(255, 0x5C, 0x5C, 0x5C) : Color.FromArgb(255, 0xA8, 0xA8, 0xA8);
         var edge = Color.FromArgb(dark ? (byte)110 : (byte)70, 0, 0, 0);
-        using var font = new CanvasTextFormat
-        {
-            FontSize = 12, WordWrapping = CanvasWordWrapping.NoWrap,
-            TrimmingGranularity = CanvasTextTrimmingGranularity.Character, TrimmingSign = CanvasTrimmingSign.Ellipsis,
-        };
+        ds.Clear(Colors.Transparent);
 
         int top = -1;
-        Rect? selected = null;
         for (int i = 0; i < _rects.Count; i++)
         {
             var r = _rects[i];
@@ -96,22 +131,14 @@ public sealed partial class TreemapControl : UserControl
             var fill = r.Node is null ? grey : Shade(Palette[top % Palette.Length], r.Depth, dark);
             ds.FillRectangle(rect, fill);
             ds.DrawRectangle(rect, edge, 0.5f);
-            if (r.Node is not null && ReferenceEquals(r.Node, Selected)) selected = rect;
 
             // Only rects with no children drawn inside show a label (a parent's label would be painted over).
             var leaf = i + 1 == _rects.Count || _rects[i + 1].Depth <= r.Depth;
             if (leaf && rect.Width >= 44 && rect.Height >= 18)
             {
                 var text = Luminance(fill) > 0.55 ? Color.FromArgb(255, 0x1A, 0x1A, 0x1A) : Colors.White;
-                var label = $"{r.Label}  {SizeFormat.Format(r.Size)}";
-                ds.DrawText(label, new Rect(rect.X + 4, rect.Y + 2, rect.Width - 8, 16), text, font);
+                ds.DrawText($"{r.Label}  {SizeFormat.Format(r.Size)}", new Rect(rect.X + 4, rect.Y + 2, rect.Width - 8, 16), text, _font);
             }
-        }
-
-        if (selected is { } s)
-        {
-            var outline = dark ? Colors.White : Colors.Black;
-            ds.DrawRectangle(new Rect(s.X + 1, s.Y + 1, Math.Max(0, s.Width - 2), Math.Max(0, s.Height - 2)), outline, 2.5f);
         }
     }
 
@@ -128,6 +155,9 @@ public sealed partial class TreemapControl : UserControl
     /// <summary>The deepest rect under the point that stands for a real node (aggregates fall through to their parent).</summary>
     private FileNode? HitTest(Point p)
     {
+        var size = _canvas.Size; // mid-resize the rects still use the old size
+        if (size.Width > 0 && size.Height > 0 && _laidOutSize.Width > 0)
+            p = new Point(p.X * _laidOutSize.Width / size.Width, p.Y * _laidOutSize.Height / size.Height);
         for (int i = _rects.Count - 1; i >= 0; i--)
         {
             var b = _rects[i].Bounds;
