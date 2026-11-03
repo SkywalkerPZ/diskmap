@@ -6,5 +6,20 @@
     <Window.SystemBackdrop>
         <MicaBackdrop />
     </Window.SystemBackdrop>
-    <Grid />
+    <Grid RowDefinitions="Auto,*">
+        <InfoBar x:Name="ElevationBar" x:Uid="ElevationBar" Severity="Informational" IsClosable="False">
+            <InfoBar.ActionButton>
+                <Button x:Name="ElevationButton" x:Uid="ElevationButton" Click="OnRelaunchClick" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+        <NavigationView x:Name="Nav" Grid.Row="1" PaneDisplayMode="Left" IsBackButtonVisible="Collapsed"
+                        SelectionChanged="OnSelectionChanged">
+            <NavigationView.MenuItems>
+                <NavigationViewItem x:Name="ExploreItem" x:Uid="NavExplore" Tag="Explore" Icon="Folder" />
+                <NavigationViewItem x:Uid="NavCleanUp" Tag="CleanUp" Icon="Delete" />
+                <NavigationViewItem x:Uid="NavQuarantine" Tag="Quarantine" Icon="Shop" />
+            </NavigationView.MenuItems>
+            <Frame x:Name="ContentFrame" />
+        </NavigationView>
+    </Grid>
 </Window>
