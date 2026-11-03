@@ -55,16 +55,18 @@ public sealed partial class CleanUpViewModel : ObservableObject
     public bool NoScan => _session.Current is null;
     public bool NothingToClean => !NoScan && Groups.Count == 0;
     public bool HasGroups => Groups.Count > 0;
-    public bool CanClean => !IsBusy && !_session.IsScanning && Ticked().Count > 0;
+    public bool CanClean => !IsBusy && !_session.IsScanning && !_session.IsRemoving && Ticked().Count > 0;
     public string CleanText => Str.Format("CleanButton", SizeFormat.Format(Ticked().Sum(i => i.Bytes)));
 
     private IEnumerable<CleanItem> AllItems => Groups.SelectMany(g => g.Items);
+    private static string KeyOf(CleanItem i) => i.Match.Node.FullPath + "|" + i.Match.Rule.Id;
+    public IReadOnlyList<CleanItem> TickedItems() => Ticked();
     private List<CleanItem> Ticked() => AllItems.Where(i => i.IsChecked && i.CanCheck).ToList();
 
     private void OnSessionChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(ScanSession.Matches) or nameof(ScanSession.Current)) Rebuild();
-        else if (e.PropertyName == nameof(ScanSession.IsScanning))
+        else if (e.PropertyName is nameof(ScanSession.IsScanning) or nameof(ScanSession.IsRemoving))
         {
             OnPropertyChanged(nameof(CanClean));
             UpdateIdle();
@@ -73,6 +75,9 @@ public sealed partial class CleanUpViewModel : ObservableObject
 
     private void Rebuild()
     {
+        // keep the user's ticks across rebuilds; only items not seen before start ticked
+        var prior = new Dictionary<string, bool>();
+        foreach (var old in AllItems) prior.TryAdd(KeyOf(old), old.IsChecked);
         Groups.Clear();
         var matches = _session.Matches;
         long bin = matches.Any(m => m.Rule.Method == RemovalMethod.EmptyRecycleBin) ? BinSize() : 0;
@@ -82,7 +87,7 @@ public sealed partial class CleanUpViewModel : ObservableObject
             var isBin = m.Rule.Method == RemovalMethod.EmptyRecycleBin;
             if (isBin && bin == 0) continue; // nothing to empty
             var item = new CleanItem(m, isBin ? bin : m.Node.Size, _session.IsElevated);
-            item.IsChecked = item.CanCheck; // greyed-out (needs administrator) items start unticked
+            item.IsChecked = item.CanCheck && (!prior.TryGetValue(KeyOf(item), out var was) || was); // greyed-out (needs administrator) items are never ticked
             item.PropertyChanged += OnItemChanged;
             items.Add(item);
         }
@@ -119,7 +124,7 @@ public sealed partial class CleanUpViewModel : ObservableObject
 
     private void UpdateIdle()
     {
-        var idle = !IsBusy && !_session.IsScanning;
+        var idle = !IsBusy && !_session.IsScanning && !_session.IsRemoving;
         foreach (var i in AllItems) i.IsIdle = idle;
     }
 
@@ -130,23 +135,20 @@ public sealed partial class CleanUpViewModel : ObservableObject
     }
 
     /// <summary>Text for the bulk confirmation: how many items and how much, then the undo line.</summary>
-    public string BulkConfirmText
+    public string BulkConfirmText(IReadOnlyList<CleanItem> t)
     {
-        get
-        {
-            var t = Ticked();
-            var undo = _session.Settings.UndoDays;
-            var line = undo > 0 ? Str.Format("BulkUndo", undo) : $"{Str.Get("BulkPermanent")}\n{Str.Get("CantUndo")}";
-            return $"{Str.Format("BulkSummary", t.Count, SizeFormat.Format(t.Sum(i => i.Bytes)))}\n\n{line}";
-        }
+        var undo = _session.Settings.UndoDays;
+        var line = undo > 0 ? Str.Format("BulkUndo", undo) : $"{Str.Get("BulkPermanent")}\n{Str.Get("CantUndo")}";
+        return $"{Str.Format("BulkSummary", t.Count, SizeFormat.Format(t.Sum(i => i.Bytes)))}\n\n{line}";
     }
 
     public string ConfirmText(CleanItem item) => Confirmation.Body(item.Match.Rule, _session.Settings.UndoDays);
 
     /// <summary>Removes the ticked items one after another (the caller has confirmed) and reports one combined result.</summary>
-    public async Task CleanAsync()
+    public async Task CleanAsync(IReadOnlyList<CleanItem> confirmed)
     {
-        var todo = Ticked();
+        // exactly what the dialog showed, minus anything that stopped being removable or left the tree meanwhile
+        var todo = confirmed.Where(i => i.CanCheck && _session.Current is { } cur && FileTree.RootOf(i.Match.Node) == cur.Root).ToList();
         if (!CanClean || todo.Count == 0) return;
         await RunAsync(todo, true);
     }
@@ -160,6 +162,8 @@ public sealed partial class CleanUpViewModel : ObservableObject
 
     private async Task RunAsync(List<CleanItem> todo, bool bulk)
     {
+        if (!_session.TryBeginRemoval()) return;
+        var removal = _session.Removal; // one service for the whole run: a settings change mid-run must not switch later items to permanent delete
         IsBusy = true;
         IsResultOpen = false;
         long freed = 0, quarantined = 0, skipped = 0;
@@ -172,7 +176,7 @@ public sealed partial class CleanUpViewModel : ObservableObject
                 var item = todo[n];
                 BusyText = bulk ? Str.Format("Cleaning", n + 1, todo.Count)
                                 : Str.Get(item.IsComponentStore ? "RemovingDism" : "Removing");
-                var r = await _session.Removal.RemoveAsync(item.Match, CancellationToken.None);
+                var r = await removal.RemoveAsync(item.Match, CancellationToken.None);
                 freed += r.BytesFreed; quarantined += r.BytesQuarantined; skipped += r.BytesSkipped;
                 if (!r.Success) { failed++; firstError ??= r.Error; }
             }
@@ -185,11 +189,11 @@ public sealed partial class CleanUpViewModel : ObservableObject
             BusyText = Str.Get("UpdatingMap");
             await RescanAsync(todo.Select(i => i.Match.Node.Parent));
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        catch (Exception e) // async-void caller: nothing may escape; the removal result stands
         {
-            Show(e.Message, InfoBarSeverity.Warning); // the rescan failed; the removal result stands
+            Show(e.Message, InfoBarSeverity.Warning);
         }
-        finally { IsBusy = false; BusyText = ""; }
+        finally { IsBusy = false; BusyText = ""; _session.EndRemoval(); }
     }
 
     // Rescans each affected parent once, outermost first; a parent already replaced by an ancestor's rescan is skipped.

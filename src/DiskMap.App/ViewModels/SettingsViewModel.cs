@@ -12,7 +12,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public SettingsViewModel()
     {
-        UndoIndex = Math.Max(0, Array.IndexOf(UndoChoices, _session.Settings.UndoDays));
+        var i = Array.IndexOf(UndoChoices, _session.Settings.UndoDays);
+        UndoIndex = i >= 0 ? i : 1; // an unexpected value is shown (and behaves) as the 3-day default, never as Off
         AlwaysElevated = _session.Settings.AlwaysStartElevated;
         _ready = true;
     }

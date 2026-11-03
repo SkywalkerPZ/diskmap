@@ -62,6 +62,18 @@ public sealed partial class ScanSession : ObservableObject
     [ObservableProperty] public partial ScanResult? Current { get; private set; }
     [ObservableProperty] public partial IReadOnlyList<RuleMatch> Matches { get; private set; } = [];
     [ObservableProperty] public partial bool IsScanning { get; private set; }
+    /// <summary>True while any page runs a removal; Explore and Clean up both check it so removals never overlap.</summary>
+    [ObservableProperty] public partial bool IsRemoving { get; private set; }
+
+    /// <summary>Claims the session-wide removal slot; false if a removal or scan is already running.</summary>
+    public bool TryBeginRemoval()
+    {
+        if (IsRemoving || IsScanning) return false;
+        IsRemoving = true;
+        return true;
+    }
+
+    public void EndRemoval() => IsRemoving = false;
     [ObservableProperty] public partial long FilesSeen { get; private set; }
     [ObservableProperty] public partial TimeSpan Elapsed { get; private set; }
     /// <summary>The drive of the latest scan, e.g. C: root; null before the first scan.</summary>

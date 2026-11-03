@@ -13,8 +13,9 @@ public sealed partial class CleanUpPage : Page
     private async void OnCleanClick(object sender, RoutedEventArgs e)
     {
         if (!ViewModel.CanClean) return;
-        if (!await Confirmation.AskAsync(XamlRoot, Str.Get("BulkTitle"), ViewModel.BulkConfirmText, Str.Get("BulkConfirm"))) return;
-        await ViewModel.CleanAsync();
+        var ticked = ViewModel.TickedItems(); // taken once: the dialog and the removal use the same list
+        if (!await Confirmation.AskAsync(XamlRoot, Str.Get("BulkTitle"), ViewModel.BulkConfirmText(ticked), Str.Get("BulkConfirm"))) return;
+        await ViewModel.CleanAsync(ticked);
     }
 
     private async void OnRemoveClick(object sender, RoutedEventArgs e)

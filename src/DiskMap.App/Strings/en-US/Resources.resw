@@ -81,11 +81,12 @@
   <data name="UndoOff.Content" xml:space="preserve"><value>Off</value></data>
   <data name="UndoThree.Content" xml:space="preserve"><value>3 days</value></data>
   <data name="UndoSeven.Content" xml:space="preserve"><value>7 days</value></data>
-  <data name="UndoNote.Text" xml:space="preserve"><value>When this is off, removed files are deleted permanently.</value></data>
+  <data name="UndoNote.Text" xml:space="preserve"><value>When this is off, newly removed files are deleted permanently. Files already in quarantine stay until they expire or you choose "Empty now".</value></data>
   <data name="ElevatedToggle.Header" xml:space="preserve"><value>Always start as administrator</value></data>
   <data name="AboutHeader.Text" xml:space="preserve"><value>About</value></data>
   <data name="VersionText" xml:space="preserve"><value>DiskMap version {0}</value></data>
   <data name="LicenseText.Text" xml:space="preserve"><value>MIT License</value></data>
   <data name="RepoLink.Content" xml:space="preserve"><value>DiskMap on GitHub</value></data>
   <data name="SettingsSaveFailed" xml:space="preserve"><value>Couldn't save your settings: {0}</value></data>
+  <data name="QuarantineLoadFailed" xml:space="preserve"><value>Couldn't read the quarantine: {0}</value></data>
 </root>

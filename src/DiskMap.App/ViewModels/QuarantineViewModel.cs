@@ -39,6 +39,15 @@ public sealed partial class QuarantineViewModel : ObservableObject
     /// <summary>Lists every fixed drive's quarantine; never creates a quarantine folder.</summary>
     public void Refresh()
     {
+        try { Load(); }
+        catch (Exception e) // called from a Loaded handler: nothing may escape
+        {
+            Show(Str.Format("QuarantineLoadFailed", e.Message), InfoBarSeverity.Warning);
+        }
+    }
+
+    private void Load()
+    {
         var roots = ScanSession.QuarantineRoots().ToList();
         _stores = roots.Select(_session.StoreFor).ToList();
         Items.Clear();

@@ -56,7 +56,7 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     public string Status => _session.Status;
     public bool IsScanning => _session.IsScanning;
-    public bool CanChangeDrive => !IsScanning && !IsBusy;
+    public bool CanChangeDrive => !IsScanning && !IsBusy && !_session.IsRemoving;
 
     public bool HasSelection => Selected is not null;
     public bool NoSelection => Selected is null;
@@ -76,7 +76,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>Shown greyed out with "Needs administrator", never hidden.</summary>
     public bool NeedsAdmin => Match is { Rule.NeedsAdmin: true } && !_session.IsElevated;
     public string? AdminTip => NeedsAdmin ? Str.Get("NeedsAdministrator") : null;
-    public bool CanRemove => Match is not null && !NeedsAdmin && !IsBusy && !IsScanning;
+    public bool CanRemove => Match is not null && !NeedsAdmin && !IsBusy && !IsScanning && !_session.IsRemoving;
     public bool CanEstimate => IsComponentStore && !NeedsAdmin && !IsEstimating;
     public bool HasEstimate => EstimateText.Length > 0;
 
@@ -111,7 +111,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     private async Task ScanDriveAsync(string drive)
     {
         try { await _session.ScanAsync(drive); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+        catch (Exception e) // fired from a property-changed handler: nothing may escape
         {
             ShowResult(Str.Format("ScanFailed", drive, e.Message), InfoBarSeverity.Warning);
         }
@@ -122,6 +122,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         switch (e.PropertyName)
         {
             case nameof(ScanSession.Status): OnPropertyChanged(nameof(Status)); break;
+            case nameof(ScanSession.IsRemoving):
             case nameof(ScanSession.IsScanning):
                 OnPropertyChanged(nameof(IsScanning));
                 OnPropertyChanged(nameof(CanChangeDrive));
@@ -196,7 +197,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>Removes the selected match (the caller has already confirmed), reports the result and rescans its parent folder.</summary>
     public async Task RemoveAsync()
     {
-        if (!CanRemove || Match is not { } match) return;
+        if (!CanRemove || Match is not { } match || !_session.TryBeginRemoval()) return;
         IsBusy = true;
         IsResultOpen = false;
         BusyText = Str.Get(match.Rule.Method == RemovalMethod.DismComponentCleanup ? "RemovingDism" : "Removing");
@@ -221,11 +222,11 @@ public sealed partial class ExploreViewModel : ObservableObject
                 MapChanged?.Invoke(this, EventArgs.Empty);
             }
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        catch (Exception e) // async-void caller: nothing may escape; the removal result above already stands
         {
-            ShowResult(e.Message, InfoBarSeverity.Warning); // the rescan failed; the removal result above already stands
+            ShowResult(e.Message, InfoBarSeverity.Warning);
         }
-        finally { IsBusy = false; BusyText = ""; }
+        finally { IsBusy = false; BusyText = ""; _session.EndRemoval(); }
     }
 
     /// <summary>

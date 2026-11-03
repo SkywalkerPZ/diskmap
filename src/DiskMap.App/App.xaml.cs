@@ -43,7 +43,8 @@ public partial class App : Application
     {
         foreach (var root in ScanSession.QuarantineRoots())
         {
-            try { new QuarantineStore(root).PurgeExpired(undoDays, DateTime.UtcNow); }
+            // Off only affects new removals: existing entries keep the longest promise (7 days)
+            try { new QuarantineStore(root).PurgeExpired(undoDays == 0 ? 7 : undoDays, DateTime.UtcNow); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } // one bad drive must not block startup
         }
     }
