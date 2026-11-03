@@ -17,6 +17,10 @@ internal sealed class MftRecord
     public long DataSize, DataAllocated;
     public List<(long Lcn, long Length)>? DataRuns; // only when parsed withRuns
     public long WofAllocated = -1;      // WofCompressedData stream (CompactOS/WOF); -1 when absent
+    public uint ReparseTag;             // from a resident $REPARSE_POINT; 0 when absent or not readable here
+
+    /// <summary>A junction, symlink or mount point (or a reparse point whose tag we couldn't read): never descended.</summary>
+    public bool IsLink => (Attributes & 0x400) != 0 && (ReparseTag == 0 || NativeMethods.IsNameSurrogate(ReparseTag));
 
     private static long RoundUp(long n, long cluster) => (n + cluster - 1) / cluster * cluster;
 
@@ -31,6 +35,7 @@ internal sealed class MftRecord
     {
         Names.AddRange(ext.Names);
         if (WofAllocated < 0) WofAllocated = ext.WofAllocated;
+        if (ReparseTag == 0) ReparseTag = ext.ReparseTag;
         if (HasData || !ext.HasData) return;
         HasData = true; DataResident = ext.DataResident; DataSize = ext.DataSize; DataAllocated = ext.DataAllocated; DataRuns = ext.DataRuns;
     }
@@ -81,6 +86,9 @@ internal static class MftRecordParser
                             r.Names.Add(((ulong)I64(v, 0) & RefMask, Encoding.Unicode.GetString(v.Slice(0x42, v[0x40] * 2))));
                         break;
                     }
+                    case 0xC0 when !nonResident && U32(a, 0x10) >= 4: // $REPARSE_POINT: the value starts with the tag
+                        r.ReparseTag = U32(Value(a), 0);
+                        break;
                     case 0x80 when unnamed && !r.HasData: // unnamed $DATA; named streams (ADS) are ignored like GetCompressedFileSize does
                         if (!nonResident)
                         {

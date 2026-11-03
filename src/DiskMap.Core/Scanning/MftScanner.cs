@@ -139,7 +139,7 @@ public sealed class MftScanner : IScanner
             var node = new FileNode { Name = name, Parent = dir, IsDirectory = r.IsDirectory, IsReparsePoint = reparse, LastWriteUtc = Utc(r.LastWriteFileTime) };
             if (r.IsDirectory)
             {
-                if (!reparse) Fill(node, child, records, kids, visited, sized, cluster); // never follow junctions or symlinks
+                if (!r.IsLink) Fill(node, child, records, kids, visited, sized, cluster); // never follow junctions or symlinks; cloud-sync folders are real
             }
             else
             {

@@ -293,4 +293,45 @@ public sealed partial class MftScannerTests
         Assert.Equal(4, a.FileCount);
         Assert.Null(a.Parent);
     }
+
+    private static byte[] ReparseAttr(uint tag)
+    {
+        var v = new byte[8]; // tag, data length, reserved
+        W32(v, 0, tag);
+        return Resident(0xC0, v);
+    }
+
+    [Fact]
+    public void Parse_ReadsReparseTag_OnlyNameSurrogatesAreLinks()
+    {
+        var cloud = MftRecordParser.Parse(Record(3, StdInfo(T, 0x410), FileName(5, "OneDrive"), ReparseAttr(0x9000601A)))!;
+        Assert.Equal(0x9000601Au, cloud.ReparseTag);
+        Assert.False(cloud.IsLink);
+        var junction = MftRecordParser.Parse(Record(3, StdInfo(T, 0x410), FileName(5, "j"), ReparseAttr(0xA0000003)))!;
+        Assert.Equal(0xA0000003u, junction.ReparseTag);
+        Assert.True(junction.IsLink);
+        var symlink = MftRecordParser.Parse(Record(3, StdInfo(T, 0x410), FileName(5, "s"), ReparseAttr(0xA000000C)))!;
+        Assert.True(symlink.IsLink);
+        var unknown = MftRecordParser.Parse(Record(3, StdInfo(T, 0x410), FileName(5, "u")))!; // tag not readable here: treated as a link
+        Assert.True(unknown.IsLink);
+        var plain = MftRecordParser.Parse(Record(3, StdInfo(T, 0x10), FileName(5, "d")))!;
+        Assert.False(plain.IsLink);
+    }
+
+    [Fact]
+    public void BuildTree_DescendsCloudFolder_ButNotJunction()
+    {
+        var recs = new MftRecord?[20];
+        recs[5] = MftRecordParser.Parse(Record(3, StdInfo(T, 6), FileName(5, ".")));
+        recs[16] = MftRecordParser.Parse(Record(3, StdInfo(T, 0x410), FileName(5, "OneDrive"), ReparseAttr(0x9000601A)));
+        recs[17] = MftRecordParser.Parse(Record(1, StdInfo(T), FileName(16, "doc.bin"), NonResident(0x80, 0, 8192, 8000, SomeRuns)));
+        recs[18] = MftRecordParser.Parse(Record(3, StdInfo(T, 0x410), FileName(5, "j"), ReparseAttr(0xA0000003)));
+        recs[19] = MftRecordParser.Parse(Record(1, StdInfo(T), FileName(18, "elsewhere.bin"), NonResident(0x80, 0, 4096, 4000, SomeRuns)));
+        var root = MftScanner.BuildTree(recs, 5, "root", Cluster);
+        var od = root.Children.Single(c => c.Name == "OneDrive");
+        Assert.True(od.IsReparsePoint); // still never matched by rules
+        Assert.Equal("doc.bin", Assert.Single(od.Children).Name);
+        Assert.Empty(root.Children.Single(c => c.Name == "j").Children);
+        Assert.Equal(8192, root.Size);
+    }
 }
