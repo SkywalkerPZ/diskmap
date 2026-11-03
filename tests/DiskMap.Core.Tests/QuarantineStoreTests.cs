@@ -5,7 +5,8 @@ namespace DiskMap.Core.Tests;
 
 public class QuarantineStoreTests
 {
-    private static string Q(Fixture f) => Path.Combine(f.Root, "DiskMap Quarantine");
+    private static string Top(Fixture f) => Path.Combine(f.Root, "DiskMap Quarantine");
+    private static string Q(Fixture f) => Path.Combine(Top(f), System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value);
     private static string EntryDir(Fixture f, Guid id) => Path.Combine(Q(f), id.ToString("N"));
 
     [Fact]
@@ -25,7 +26,7 @@ public class QuarantineStoreTests
         Assert.Equal(100, store.TotalSize);
         Assert.Equal(dir, e.OriginalPath);
         Assert.Single(store.Entries);
-        Assert.True((new DirectoryInfo(Q(f)).Attributes & FileAttributes.Hidden) != 0);
+        Assert.True((new DirectoryInfo(Top(f)).Attributes & FileAttributes.Hidden) != 0);
     }
 
     [Fact]
@@ -85,18 +86,21 @@ public class QuarantineStoreTests
         using var f = new Fixture();
         var store = new QuarantineStore(f.Root);
         var now = DateTime.UtcNow;
-        var a = store.Add(f.File("a.bin", 5), 5, "r");
-        var b = store.Add(f.File("b.bin", 5), 5, "r");
+        var a = store.Add(f.File("a.bin", 5), 5, "r", 3);
+        var b = store.Add(f.File("b.bin", 5), 5, "r", 3);
+        var c = store.Add(f.File("c.bin", 5), 5, "r", 7);
         Backdate(f, a.Id, now.AddDays(-4));
         Backdate(f, b.Id, now.AddDays(-2));
+        Backdate(f, c.Id, now.AddDays(-4));
         store = new QuarantineStore(f.Root);
 
-        Assert.Equal(1, store.PurgeExpired(3, now));
-        var left = Assert.Single(store.Entries);
-        Assert.Equal(b.Id, left.Id);
+        // each entry keeps the promise made when it was removed: a (3 days, 4 old) goes; b (3, 2 old) and c (7, 4 old) stay
+        Assert.Equal(1, store.PurgeExpired(now));
+        Assert.Equal(new[] { b.Id, c.Id }.Order(), store.Entries.Select(e => e.Id).Order());
         Assert.False(Directory.Exists(EntryDir(f, a.Id)));
-        Assert.True(Directory.Exists(EntryDir(f, b.Id)));
-        Assert.Equal(1, store.PurgeExpired(0, now));
+        Assert.Equal(1, store.PurgeExpired(now.AddDays(1.5)));
+        Assert.Equal(c.Id, Assert.Single(store.Entries).Id);
+        Assert.Equal(1, store.PurgeExpired(now.AddDays(3)));
         Assert.Empty(store.Entries);
     }
 
@@ -196,8 +200,8 @@ public class QuarantineStoreTests
         foreach (var a in new[] { "/c", "mklink", "/J", Path.Combine(victim, "j"), Path.GetDirectoryName(outside)! }) psi.ArgumentList.Add(a);
         using (var pr = System.Diagnostics.Process.Start(psi)!) { pr.WaitForExit(); Assert.Equal(0, pr.ExitCode); }
         var store = new QuarantineStore(f.Root);
-        var e = store.Add(victim, 0, "r");
-        Assert.Equal(1, store.PurgeExpired(0, DateTime.UtcNow));
+        var e = store.Add(victim, 0, "r", 0);
+        Assert.Equal(1, store.PurgeExpired(DateTime.UtcNow));
         Assert.Empty(store.Entries);
         Assert.False(Directory.Exists(EntryDir(f, e.Id)));
         Assert.True(File.Exists(outside));
@@ -265,11 +269,141 @@ public class QuarantineStoreTests
     {
         using var f = new Fixture();
         var store = new QuarantineStore(f.Root);
-        var locked = store.Add(f.File("locked.bin", 1), 1, "r");
-        var free = store.Add(f.File("free.bin", 1), 1, "r");
+        var locked = store.Add(f.File("locked.bin", 1), 1, "r", 0);
+        var free = store.Add(f.File("free.bin", 1), 1, "r", 0);
         using var h = new FileStream(Path.Combine(EntryDir(f, locked.Id), "locked.bin"), FileMode.Open, FileAccess.Read, FileShare.None);
-        Assert.Equal(1, store.PurgeExpired(0, DateTime.UtcNow));
+        Assert.Equal(1, store.PurgeExpired(DateTime.UtcNow));
         Assert.Equal(locked.Id, Assert.Single(store.Entries).Id);
         Assert.False(Directory.Exists(EntryDir(f, free.Id)));
+    }
+
+    private static void Junction(string link, string target)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo("cmd.exe") { CreateNoWindow = true, UseShellExecute = false };
+        foreach (var a in new[] { "/c", "mklink", "/J", link, target }) psi.ArgumentList.Add(a);
+        using var pr = System.Diagnostics.Process.Start(psi)!;
+        pr.WaitForExit();
+        Assert.Equal(0, pr.ExitCode);
+    }
+
+    [Fact]
+    public void CreatedFolders_HaveProtectedDacls_ForThisAccountOnly()
+    {
+        using var f = new Fixture();
+        new QuarantineStore(f.Root).Add(f.File("a.bin", 1), 1, "r");
+        var me = System.Security.Principal.WindowsIdentity.GetCurrent().User!;
+        var top = new DirectoryInfo(Top(f)).GetAccessControl();
+        Assert.True(top.AreAccessRulesProtected);
+        Assert.DoesNotContain(top.GetAccessRules(true, true, typeof(System.Security.Principal.SecurityIdentifier)).Cast<System.Security.AccessControl.FileSystemAccessRule>(),
+            r => r.IdentityReference.Equals(me));
+        var acct = new DirectoryInfo(Q(f)).GetAccessControl();
+        Assert.True(acct.AreAccessRulesProtected);
+        var sids = acct.GetAccessRules(true, true, typeof(System.Security.Principal.SecurityIdentifier))
+            .Cast<System.Security.AccessControl.FileSystemAccessRule>().Select(r => r.IdentityReference.Value).ToHashSet();
+        Assert.Equal(new HashSet<string> { "S-1-5-18", "S-1-5-32-544", me.Value }, sids);
+    }
+
+    [Fact]
+    public void ExistingTopFolder_NotMadeByDiskMap_IsRefusedAndLeftAlone()
+    {
+        using var f = new Fixture();
+        Directory.CreateDirectory(Top(f)); // inherited permissions: anyone who could write the parent could have planted it
+        var src = f.File("a.bin", 1);
+        var store = new QuarantineStore(f.Root);
+        Assert.NotNull(store.Untrusted);
+        Assert.Throws<IOException>(() => store.Add(src, 1, "r"));
+        Assert.True(File.Exists(src));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Top(f)));
+        Assert.False(new DirectoryInfo(Top(f)).GetAccessControl().AreAccessRulesProtected); // not "repaired"
+    }
+
+    [Fact]
+    public void TopFolderJunction_IsRefused_NothingWrittenAtTarget()
+    {
+        using var f = new Fixture();
+        var target = f.Dir("elsewhere");
+        Junction(Top(f), target);
+        var src = f.File("a.bin", 1);
+        var store = new QuarantineStore(f.Root);
+        Assert.Throws<IOException>(() => store.Add(src, 1, "r"));
+        Assert.Contains("link", store.Untrusted);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(target));
+        Assert.True(File.Exists(src));
+    }
+
+    [Fact]
+    public void EntryFolderJunction_IsRefused_PurgeNeverReachesTarget()
+    {
+        using var f = new Fixture();
+        var precious = f.File(Path.Combine("outside", "precious.txt"), 3);
+        new QuarantineStore(f.Root).Add(f.File("a.bin", 1), 1, "r", 0);
+        Junction(Path.Combine(Q(f), Guid.NewGuid().ToString("N")), Path.GetDirectoryName(precious)!);
+        var store = new QuarantineStore(f.Root);
+        Assert.NotNull(store.Untrusted);
+        Assert.Empty(store.Entries);
+        Assert.Throws<IOException>(() => store.PurgeExpired(DateTime.UtcNow.AddDays(30)));
+        Assert.Throws<IOException>(() => store.EmptyAll());
+        Assert.True(File.Exists(precious));
+    }
+
+    [Fact]
+    public void OldManifestWithoutKeepDays_LoadsAsSevenDays()
+    {
+        using var f = new Fixture();
+        var e = new QuarantineStore(f.Root).Add(f.File("a.bin", 1), 1, "r", 3);
+        var path = Path.Combine(Q(f), "manifest.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(new[] { new { e.Id, e.OriginalPath, e.Size, e.RemovedUtc, e.RuleId } }));
+        var s = new QuarantineStore(f.Root);
+        Assert.Equal(7, Assert.Single(s.Entries).KeepDays);
+        Assert.Equal(e.OriginalPath, s.Entries[0].OriginalPath);
+        Assert.Equal(0, s.PurgeExpired(DateTime.UtcNow.AddDays(6)));
+        Assert.Equal(1, s.PurgeExpired(DateTime.UtcNow.AddDays(7.1)));
+    }
+
+    [Fact]
+    public void Probe_TellsNotFoundFromCouldNotCheck()
+    {
+        using var f = new Fixture();
+        Assert.False(QuarantineStore.Probe(Path.Combine(f.Root, "missing")));
+        Assert.True(QuarantineStore.Probe(f.Root));
+        Assert.Null(QuarantineStore.Probe(Path.Combine(f.Root, new string('x', 40000)))); // an I/O error keeps the entry's origin
+    }
+
+    [Fact]
+    public void Partial_OneEntry_RestoreMergesBackAroundWhatStayed()
+    {
+        using var f = new Fixture();
+        var dir = f.Dir("cache");
+        var stayed = f.File(Path.Combine("cache", "in-use.bin"), 1);
+        var a = f.File(Path.Combine("cache", "a.bin"), 1);
+        var b = f.File(Path.Combine("cache", "sub", "b.bin"), 1);
+        var store = new QuarantineStore(f.Root);
+        var id = store.BeginPartial(dir, "r", 3);
+        store.MoveInto(id, a);
+        store.MoveInto(id, Path.GetDirectoryName(b)!);
+        store.EndPartial(id, 2);
+        var e = Assert.Single(store.Entries);
+        Assert.True(e.Partial);
+        Assert.Equal(2, e.Size);
+        Assert.Equal(3, e.KeepDays);
+        Assert.False(File.Exists(a) || File.Exists(b));
+
+        Assert.Equal(dir, store.Restore(id));
+        Assert.True(File.Exists(a) && File.Exists(b) && File.Exists(stayed));
+        Assert.Empty(store.Entries);
+        Assert.False(Directory.Exists(EntryDir(f, id)));
+    }
+
+    [Fact]
+    public void Partial_NothingMoved_LeavesNoEntry()
+    {
+        using var f = new Fixture();
+        var dir = f.Dir("cache");
+        var store = new QuarantineStore(f.Root);
+        var id = store.BeginPartial(dir, "r", 3);
+        store.EndPartial(id, 0);
+        Assert.Empty(store.Entries);
+        Assert.False(Directory.Exists(EntryDir(f, id)));
+        Assert.True(Directory.Exists(dir));
     }
 }

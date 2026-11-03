@@ -24,8 +24,9 @@ public class RemovalServiceTests
     private sealed class FakeBin : IRecycleBin
     {
         public int Emptied;
-        public long SizeBytes() => 5;
-        public void Empty() => Emptied++;
+        public long Size = 5;
+        public long SizeBytes() => Size;
+        public void Empty() { Emptied++; Size = 0; }
     }
 
     private sealed class Env : IDisposable
@@ -144,7 +145,7 @@ public class RemovalServiceTests
     {
         using var e = new Env();
         var nm = Path.GetDirectoryName(e.Fx.File(Path.Combine("Users", "tester", "proj", "node_modules", "a.js"), 10))!;
-        e.Fx.File(Path.Combine("Users", "tester", "proj", "package.json"), 2);
+        e.Fx.File(Path.Combine("Users", "tester", "proj", "package-lock.json"), 2);
 
         var r = await e.Svc(3).RemoveAsync(M("dev-caches", Node(nm, 10, true)), default);
 
@@ -158,7 +159,7 @@ public class RemovalServiceTests
     {
         using var e = new Env();
         var nm = Path.GetDirectoryName(e.Fx.File(Path.Combine("Users", "tester", "proj", "node_modules", "a.js"), 10))!;
-        e.Fx.File(Path.Combine("Users", "tester", "proj", "package.json"), 2);
+        e.Fx.File(Path.Combine("Users", "tester", "proj", "package-lock.json"), 2);
         var outside = e.Fx.File(Path.Combine("outside", "keep.txt"), 5);
         var link = Path.Combine(nm, "link");
         var psi = new ProcessStartInfo("cmd.exe") { CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true };
@@ -212,17 +213,17 @@ public class RemovalServiceTests
         using var e = new Env();
         var r = await e.Svc(3, elevated: true).RemoveAsync(M("windows-update", Node(Path.Combine(e.Win, "WinSxS"), 1, true)), default);
         Assert.True(r.Success);
-        Assert.Equal(("DISM", "/Online /Cleanup-Image /StartComponentCleanup /ResetBase"), Assert.Single(e.Runner.Calls));
+        Assert.Equal((RemovalService.SystemTool("dism.exe"), "/Online /Cleanup-Image /StartComponentCleanup /ResetBase"), Assert.Single(e.Runner.Calls));
     }
 
     [Fact]
-    public async Task Dism_NonZeroExit_FailsWithFirstLine()
+    public async Task Dism_NonZeroExit_FailsWithErrorLine()
     {
         using var e = new Env();
-        e.Runner.Result = new ProcessOutput(5, "\r\nAccess is denied.\r\nmore");
+        e.Runner.Result = new ProcessOutput(5, "\r\nDeployment Image Servicing and Management tool\r\nVersion: 10.0\r\n\r\nError: 5\r\n\r\nAccess is denied.\r\n\r\nThe DISM log file can be found at C:\\Windows\\Logs\\DISM\\dism.log\r\n");
         var r = await e.Svc(3, elevated: true).RemoveAsync(M("windows-update", Node(Path.Combine(e.Win, "WinSxS"), 1, true)), default);
         Assert.False(r.Success);
-        Assert.Equal("Access is denied.", r.Error);
+        Assert.Equal("Error: 5 Access is denied.", r.Error);
     }
 
     [Fact]
@@ -231,7 +232,7 @@ public class RemovalServiceTests
         using var e = new Env();
         var r = await e.Svc(3, elevated: true).RemoveAsync(M("hibernation", Node(Path.Combine(e.Fx.Root, "hiberfil.sys"), 1, false)), default);
         Assert.True(r.Success);
-        Assert.Equal(("powercfg", "/hibernate off"), Assert.Single(e.Runner.Calls));
+        Assert.Equal((RemovalService.SystemTool("powercfg.exe"), "/hibernate off"), Assert.Single(e.Runner.Calls));
     }
 
     [Fact]
@@ -285,8 +286,8 @@ public class RemovalServiceTests
         using var e = new Env();
         var dir = Path.GetDirectoryName(e.Fx.File(TempRel("junk", "a.bin"), 10))!;
         e.Fx.File(TempRel("junk", "b.bin"), 10);
-        var q = Directory.CreateDirectory(Path.Combine(e.Fx.Root, "DiskMap Quarantine")).FullName;
-        using var hold = new FileStream(Path.Combine(q, ".lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        e.Store.Add(e.Fx.File("dummy.bin", 1), 1, "r"); // creates the quarantine folders
+        using var hold = new FileStream(Path.Combine(e.Store.Folder, ".lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         var sw = Stopwatch.StartNew();
 
         var r = await e.Svc(3).RemoveAsync(M("temp", Node(dir, 20, true)), default);
@@ -311,7 +312,7 @@ public class RemovalServiceTests
                 var f = e.Fx.File(Path.Combine("Users", "tester", "proj", "node_modules", "sub" + d, "f" + i + ".js"), 10);
                 if (d == 2 && i == 3) locked = f;
             }
-        e.Fx.File(Path.Combine("Users", "tester", "proj", "package.json"), 2);
+        e.Fx.File(Path.Combine("Users", "tester", "proj", "package-lock.json"), 2);
 
         RemovalResult r;
         using (new FileStream(locked!, FileMode.Open, FileAccess.Read, FileShare.None))
@@ -320,7 +321,56 @@ public class RemovalServiceTests
         Assert.True(r.Success, r.Error);
         Assert.True(r.BytesSkipped > 0);
         Assert.Equal(new[] { locked }, Directory.EnumerateFiles(nm, "*", SearchOption.AllDirectories).ToArray());
-        if (undoDays > 0) Assert.InRange(e.Store.Entries.Count, 1, 15); // 4 whole branches + 9 files, not 49
-        else Assert.Empty(e.Store.Entries);
+        if (undoDays == 0) { Assert.Empty(e.Store.Entries); return; }
+        // one entry for the one unit (node_modules), holding 4 whole branches + 9 files; restore puts all 49 back
+        var entry = Assert.Single(e.Store.Entries);
+        Assert.True(entry.Partial);
+        Assert.Equal(nm, e.Store.Restore(entry.Id));
+        Assert.Equal(50, Directory.EnumerateFiles(nm, "*", SearchOption.AllDirectories).Count());
+    }
+
+    [Fact]
+    public async Task Dism_NoErrorLine_ReportsExitCodeNotBanner()
+    {
+        using var e = new Env();
+        e.Runner.Result = new ProcessOutput(87, "\r\nDeployment Image Servicing and Management tool\r\nVersion: 10.0\r\n");
+        var r = await e.Svc(3, elevated: true).RemoveAsync(M("windows-update", Node(Path.Combine(e.Win, "WinSxS"), 1, true)), default);
+        Assert.Equal("dism exited with code 87.", r.Error);
+    }
+
+    [Fact]
+    public async Task RecycleBin_FreedIsBinSizeBeforeMinusAfter()
+    {
+        using var e = new Env();
+        e.Bin.Size = 500;
+        var r = await e.Svc(3, free: _ => 0).RemoveAsync(M("recycle-bin", Node(Path.Combine(e.Fx.Root, "bin"), 1, true)), default);
+        Assert.True(r.Success, r.Error);
+        Assert.Equal(500, r.BytesFreed);
+    }
+
+    [Fact]
+    public async Task RecycleBin_OfAnotherAccount_IsNeverEmptied()
+    {
+        using var e = new Env();
+        var other = e.Fx.User with { Sid = "S-1-5-21-1-2-3-1001" }; // elevated with an administrator's password: the token is not the launching user
+        var svc = new RemovalService(new AppSettings(3), other, e.Win, true, e.Runner, e.Bin, _ => 0, _ => e.Store);
+        var r = await svc.RemoveAsync(M("recycle-bin", Node(Path.Combine(e.Fx.Root, "bin"), 1, true)), default);
+        Assert.False(r.Success);
+        Assert.Equal(0, e.Bin.Emptied);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task WindowsTemp_OnlyItemsOwnedByTrustedAccountsOrTheUser_AreRemoved(bool ownedByUser)
+    {
+        using var e = new Env();
+        var temp = Path.Combine(e.Win, "Temp");
+        var file = e.Fx.File(Path.Combine("Windows", "Temp", "x.tmp"), 10); // owned by the account running the tests
+        var user = ownedByUser ? e.Fx.User : e.Fx.User with { Sid = "S-1-5-21-1-2-3-1001" };
+        var svc = new RemovalService(new AppSettings(0), user, e.Win, true, e.Runner, e.Bin, _ => 0, _ => e.Store);
+        var r = await svc.RemoveAsync(M("windows-temp", Node(temp, 10, true, Child("x.tmp", 10, false))), default);
+        Assert.Equal(!ownedByUser, File.Exists(file));
+        if (!ownedByUser) Assert.True(r.BytesSkipped > 0);
     }
 }

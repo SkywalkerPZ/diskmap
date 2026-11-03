@@ -1,3 +1,5 @@
+using System.Security.AccessControl;
+using System.Security.Principal;
 using DiskMap.Core.Quarantine;
 using DiskMap.Core.Rules;
 using DiskMap.Core.Safety;
@@ -26,8 +28,8 @@ public sealed class RemovalService(AppSettings settings, UserContext user, strin
             return rule.Method switch
             {
                 RemovalMethod.Quarantine => await Task.Run(() => RemovePath(match, ct), ct),
-                RemovalMethod.DismComponentCleanup => await RunTool("DISM", "/Online /Cleanup-Image /StartComponentCleanup /ResetBase", ct),
-                RemovalMethod.PowercfgHibernateOff => await RunTool("powercfg", "/hibernate off", ct),
+                RemovalMethod.DismComponentCleanup => await RunTool(SystemTool("dism.exe"), "/Online /Cleanup-Image /StartComponentCleanup /ResetBase", ct),
+                RemovalMethod.PowercfgHibernateOff => await RunTool(SystemTool("powercfg.exe"), "/hibernate off", ct),
                 RemovalMethod.EmptyRecycleBin => await Task.Run(EmptyBin, ct),
                 _ => throw new InvalidOperationException("Unknown removal method " + rule.Method),
             };
@@ -38,6 +40,16 @@ public sealed class RemovalService(AppSettings settings, UserContext user, strin
 
     private static RemovalResult Fail(string error) => new(false, 0, 0, 0, error);
 
+    /// <summary>System tools by full path, never found through the search path.</summary>
+    public static string SystemTool(string exe) => Path.Combine(Environment.SystemDirectory, exe);
+
+    /// <summary>
+    /// The shell's Recycle Bin calls act on this process's account. When an administrator elevated DiskMap for another
+    /// account, that would be the administrator's bin, not the launching user's, so it is not offered.
+    /// </summary>
+    public static bool BinIsLaunchingUsers(UserContext user) =>
+        string.Equals(WindowsIdentity.GetCurrent().User?.Value, user.Sid, StringComparison.OrdinalIgnoreCase);
+
     private async Task<RemovalResult> RunTool(string exe, string args, CancellationToken ct)
     {
         var vol = Path.GetPathRoot(windowsDir)!;
@@ -45,21 +57,31 @@ public sealed class RemovalService(AppSettings settings, UserContext user, strin
         var o = await runner.RunAsync(exe, args, ct);
         var freed = Math.Max(0, freeBytes(vol) - before);
         if (o.ExitCode == 0) return new(true, freed, 0, 0, null);
-        var line = o.StdOut.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0) ?? $"{exe} exited with code {o.ExitCode}";
-        return new(false, freed, 0, 0, line);
+        return new(false, freed, 0, 0, ToolError(Path.GetFileNameWithoutExtension(exe), o));
     }
 
+    /// <summary>DISM's "Error: N" line and the message after it; otherwise just the exit code (never the banner).</summary>
+    internal static string ToolError(string name, ProcessOutput o)
+    {
+        var lines = o.StdOut.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+        var i = lines.FindIndex(l => l.StartsWith("Error:", StringComparison.OrdinalIgnoreCase));
+        if (i < 0) return $"{name} exited with code {o.ExitCode}.";
+        return i + 1 < lines.Count && !lines[i + 1].Contains("log file", StringComparison.OrdinalIgnoreCase) ? lines[i] + " " + lines[i + 1] : lines[i];
+    }
+
+    // Freed = what the bin held before minus what it holds after (all drives, like the size that was shown).
     private RemovalResult EmptyBin()
     {
-        var vol = Path.GetPathRoot(windowsDir)!;
-        var before = freeBytes(vol);
+        if (!BinIsLaunchingUsers(user)) return Fail("This Recycle Bin belongs to another account.");
+        var before = bin.SizeBytes();
         bin.Empty();
-        return new(true, Math.Max(0, freeBytes(vol) - before), 0, 0, null);
+        return new(true, Math.Max(0, before - bin.SizeBytes()), 0, 0, null);
     }
 
-    private sealed class Ctx(Rule rule, QuarantineStore? store)
+    private sealed class Ctx(Rule rule, QuarantineStore? store, int keepDays)
     {
         public Rule Rule = rule;
+        public int KeepDays = keepDays;
         public QuarantineStore? Store = store; // null = permanent delete
         public long Quarantined, Skipped;
         public bool Any;
@@ -87,7 +109,7 @@ public sealed class RemovalService(AppSettings settings, UserContext user, strin
             items.Add((path, match.Node.Size));
         }
 
-        var ctx = new Ctx(rule, undo ? storeFor(vol) : null);
+        var ctx = new Ctx(rule, undo ? storeFor(vol) : null, settings.UndoDays);
         var before = freeBytes(vol);
         foreach (var (p, size) in items) Unit(ctx, p, size, anchor, ct);
         var freed = undo ? 0 : Math.Max(0, freeBytes(vol) - before);
@@ -115,13 +137,16 @@ public sealed class RemovalService(AppSettings settings, UserContext user, strin
 
     /// <summary>
     /// Removes one unit (move to quarantine, or permanent delete) as a whole. Only if that fails for a busy reason
-    /// and the unit is a real directory does it descend, trying each child as its own unit, so a locked file only
-    /// splits its own branch. A vanished unit is already gone; any other failure skips the unit.
+    /// and the unit is a real directory does it descend, trying each child on its own, so a locked file only splits
+    /// its own branch. In quarantine mode the children that do move all go into ONE entry for the unit (under their
+    /// relative path), so Restore puts the partial tree back in one step. A vanished unit is already gone; any other
+    /// failure skips the unit. Permanent deletes go through SafeDelete (by handle, links never entered).
     /// </summary>
-    private void Unit(Ctx c, string path, long size, bool checkRails, CancellationToken ct)
+    private void Unit(Ctx c, string path, long size, bool checkRails, CancellationToken ct, Guid? into = null)
     {
         ct.ThrowIfCancellationRequested();
         if (checkRails && !SafetyRails.CanRemove(path, c.Rule, user, windowsDir, out var why)) { c.Reason ??= why; c.Skipped += size; return; }
+        if (ForeignInWindowsTemp(path)) { c.Reason ??= "Belongs to another account, so it was left in place."; c.Skipped += Math.Max(size, 1); return; }
         FileAttributes a;
         try { a = File.GetAttributes(path); }
         catch (Exception e) when (Gone(e)) { return; }
@@ -132,8 +157,13 @@ public sealed class RemovalService(AppSettings settings, UserContext user, strin
 
         try
         {
-            if (c.Store is { } store) { store.Add(path, size, c.Rule.Id); c.Quarantined += size; }
-            else DeleteWhole(path, a);
+            if (c.Store is { } store)
+            {
+                if (into is { } id) store.MoveInto(id, path);
+                else store.Add(path, size, c.Rule.Id, c.KeepDays);
+                c.Quarantined += size;
+            }
+            else SafeDelete.DeleteTree(path);
             c.Any = true;
             return;
         }
@@ -149,20 +179,47 @@ public sealed class RemovalService(AppSettings settings, UserContext user, strin
         try { kids = Directory.EnumerateFileSystemEntries(path).ToList(); }
         catch (Exception e) when (Gone(e)) { return; }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { c.Skipped += Math.Max(size, 1); c.Error ??= e.Message; return; }
-        foreach (var k in kids) Unit(c, k, Measure(k), true, ct);
+
+        var entry = into;
+        var startedHere = c.Store is not null && into is null;
+        var before = c.Quarantined;
+        if (startedHere)
+        {
+            try { entry = c.Store!.BeginPartial(path, c.Rule.Id, c.KeepDays); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { c.Skipped += Math.Max(size, 1); c.Error ??= e.Message; return; }
+        }
+        foreach (var k in kids) Unit(c, k, Measure(k), true, ct, entry);
+        if (startedHere)
+        {
+            try { c.Store!.EndPartial(entry!.Value, c.Quarantined - before); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { c.Error ??= e.Message; } // the entry stays tracked
+        }
         // empty directories are cleaned up; one that still holds skipped files stays
         try { Directory.Delete(path, false); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
-    // A link is deleted as a link, never entered.
-    private static void DeleteWhole(string path, FileAttributes a)
+    private static readonly string[] TrustedOwners =
+        ["S-1-5-18", "S-1-5-32-544", "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464"]; // SYSTEM, Administrators, TrustedInstaller
+
+    /// <summary>
+    /// Anyone can create items in Windows\Temp; an elevated cleanup leaves the ones another standard account owns
+    /// (only SYSTEM, Administrators, TrustedInstaller or the launching user count). Fails closed.
+    /// </summary>
+    private bool ForeignInWindowsTemp(string path)
     {
-        if ((a & FileAttributes.Directory) == 0)
+        var temp = SafetyRails.Segs(Path.Combine(windowsDir, "Temp"));
+        var p = SafetyRails.Segs(path);
+        if (p.Length <= temp.Length || !SafetyRails.IsPrefix(temp, p)) return false;
+        try
         {
-            if ((a & FileAttributes.ReadOnly) != 0) File.SetAttributes(path, a & ~FileAttributes.ReadOnly);
-            File.Delete(path);
+            var sec = (File.GetAttributes(path) & FileAttributes.Directory) != 0
+                ? (FileSystemSecurity)new DirectoryInfo(path).GetAccessControl(AccessControlSections.Owner)
+                : new FileInfo(path).GetAccessControl(AccessControlSections.Owner);
+            var owner = sec.GetOwner(typeof(SecurityIdentifier))?.Value;
+            return owner is null || !(TrustedOwners.Contains(owner) || string.Equals(owner, user.Sid, StringComparison.OrdinalIgnoreCase));
         }
-        else Directory.Delete(path, (a & FileAttributes.ReparsePoint) == 0);
+        catch (Exception e) when (Gone(e)) { return false; } // already gone: nothing to protect
+        catch (Exception) { return true; }
     }
 
     // Logical bytes; reparse points are not followed.

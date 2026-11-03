@@ -11,7 +11,8 @@ public sealed class Fixture : IDisposable
     public Fixture()
     {
         var p = Path.Combine(Root, "Users", "tester");
-        User = new DiskMap.Core.Rules.UserContext("S-1-5-21-0-0-0-1001", p, Path.Combine(p, "AppData", "Local"),
+        // the real SID of the account running the tests (Recycle Bin and Windows Temp checks compare against it)
+        User = new DiskMap.Core.Rules.UserContext(System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value, p, Path.Combine(p, "AppData", "Local"),
             Path.Combine(p, "AppData", "Roaming"), Path.Combine(p, "AppData", "Local", "Temp"), Path.Combine(p, "Downloads"));
         foreach (var d in new[] { User.ProfilePath, User.LocalAppData, User.AppData, User.Temp, User.Downloads })
             Directory.CreateDirectory(d);
