@@ -91,6 +91,7 @@ public sealed partial class CleanUpViewModel : ObservableObject
             var isBin = m.Rule.Method == RemovalMethod.EmptyRecycleBin;
             var why = _session.UnavailableReason(m.Rule);
             if (isBin && why is null && bin == 0) continue; // nothing to empty
+            if (m.Rule.Method == RemovalMethod.Quarantine && m.Node.Size == 0) continue; // an empty folder frees nothing
             var item = new CleanItem(m, isBin ? bin : m.Node.Size, why);
             item.IsChecked = item.CanCheck && (!prior.TryGetValue(KeyOf(item), out var was) || was); // greyed-out (unavailable) items are never ticked
             item.PropertyChanged += OnItemChanged;
