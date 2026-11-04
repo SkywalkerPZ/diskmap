@@ -1,0 +1,17 @@
+name: Idea
+description: Suggest a feature or a new kind of item DiskMap should recognize.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve for you?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: For a new recognized item, include the folder path, what it is, and what happens after it's removed.
+    validations:
+      required: true

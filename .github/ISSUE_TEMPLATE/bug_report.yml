@@ -1,0 +1,38 @@
+name: Bug report
+description: Something in DiskMap doesn't work right.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Start → type "winver". For example "Windows 11 23H2" or "Windows 10 22H2".
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: DiskMap version
+      description: Shown in Settings → About.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: admin
+    attributes:
+      label: Was DiskMap running as administrator?
+      options: ["Yes", "No", "Not sure"]
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshot or error message
+      description: Paste a screenshot, or the contents of %LOCALAPPDATA%\DiskMap\crash.log if the app crashed.
