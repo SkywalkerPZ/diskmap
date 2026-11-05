@@ -105,7 +105,13 @@ $env:DOTNET_CLI_HOME = 'D:\dotnet-home'
 
 `publish.ps1` sets these two to the values above if they aren't already set, and uses `D:\dotnet\dotnet.exe` when `dotnet` on your PATH isn't .NET 10. Edit the script if your layout differs.
 
-Tests use temporary fixture trees and never touch real user folders. The DISM and powercfg removals should only be tried in a throwaway Windows Sandbox or VM.
+Tests use temporary fixture trees and never touch real user folders. The DISM and powercfg removals should only be tried in a throwaway VM. Windows Sandbox won't do: DISM's cleanup commands fail there with error 87.
+
+## How this was built
+
+DiskMap was built with [Claude Code](https://claude.com/claude-code). Claude wrote nearly all of the code, and every commit lists it as co-author. Most code reviews were done by AI too. I decided what the app should do and what it must never delete, and I tested it on my own PC and in Windows Sandbox.
+
+Not tested yet: a Windows update cleanup that finishes successfully. It can't run in Windows Sandbox, and it removes the option to roll back updates, so I haven't run it on a real PC. If you try it, please report what happens.
 
 ## License
 
